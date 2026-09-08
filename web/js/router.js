@@ -40,7 +40,12 @@ async function applyRoute(nextHash) {
 
   setActivePage(next.pageId);
   if (typeof next.onEnter === 'function') {
-    try { await next.onEnter(); } catch (_) {}
+    try { await next.onEnter(); } catch (error) {
+      document.documentElement.dataset.routeError = String(error && (error.stack || error.message) || error);
+      const diagnosticTarget = document.getElementById('btn-eeg-start');
+      if (diagnosticTarget) diagnosticTarget.textContent = document.documentElement.dataset.routeError;
+      console.error('route enter failed', error);
+    }
   }
 }
 

@@ -224,6 +224,25 @@ class PsdBandConfig:
 
 
 @dataclass(frozen=True)
+class ChannelQualityConfig:
+    """描述独立坏通道检测器的运行开关与算法参数。"""
+
+    automatic_enabled: bool
+    manual_enabled: bool
+    bad_channels: List[str]
+    lowcut_hz: float
+    highcut_hz: float
+    filter_order: int
+    window_sec: float
+    step_sec: float
+    relative_energy_ratio: float
+    absolute_energy_threshold_uv2: float
+    exclude_windows: int
+    recovery_windows: int
+    min_valid_channels: int
+
+
+@dataclass(frozen=True)
 class PsdConfig:
     """
     在线 PSD（频域分析）配置。
@@ -259,6 +278,7 @@ class PsdConfig:
     variance_step_sec: float
     variance_floor_uv2: float
     bands: List[PsdBandConfig]
+    quality: ChannelQualityConfig
 
 
 @dataclass(frozen=True)
@@ -933,6 +953,31 @@ def load_config(config_path: str) -> AppConfig:
     psd_variance_window_sec = float(psd_raw.get("variance_window_sec", 0.5))
     psd_variance_step_sec = float(psd_raw.get("variance_step_sec", 0.1))
     psd_variance_floor_uv2 = float(psd_raw.get("variance_floor_uv2", 1e-12))
+    quality_raw = psd_raw.get("quality", {}) or {}
+    quality_automatic_enabled = bool(quality_raw.get("automatic_enabled", True))
+    quality_manual_enabled = bool(quality_raw.get("manual_enabled", True))
+    bad_channels_raw = quality_raw.get("bad_channels", []) or []
+    if not isinstance(bad_channels_raw, list):
+        raise ValueError("signal.psd.quality.bad_channels 必须为列表")
+    quality_bad_channels: List[str] = []
+    channel_name_set = set(channel_names_cfg)
+    for item in bad_channels_raw:
+        channel_name = str(item or "").strip()
+        if not channel_name or channel_name in quality_bad_channels:
+            continue
+        if channel_name not in channel_name_set:
+            raise ValueError(f"signal.psd.quality.bad_channels 包含未知通道: {channel_name}")
+        quality_bad_channels.append(channel_name)
+    quality_lowcut_hz = float(quality_raw.get("lowcut_hz", 0.5))
+    quality_highcut_hz = float(quality_raw.get("highcut_hz", 45.0))
+    quality_filter_order = int(quality_raw.get("filter_order", 4))
+    quality_window_sec = float(quality_raw.get("window_sec", 0.5))
+    quality_step_sec = float(quality_raw.get("step_sec", 0.1))
+    quality_relative_energy_ratio = float(quality_raw.get("relative_energy_ratio", 8.0))
+    quality_absolute_energy_threshold_uv2 = float(quality_raw.get("absolute_energy_threshold_uv2", 2500.0))
+    quality_exclude_windows = int(quality_raw.get("exclude_windows", 3))
+    quality_recovery_windows = int(quality_raw.get("recovery_windows", 10))
+    quality_min_valid_channels = int(quality_raw.get("min_valid_channels", 3))
     default_bands = [
         {"key": "delta", "name": "Delta", "symbol": "", "fmin_hz": 1.0, "fmax_hz": 4.0},
         {"key": "theta", "name": "Theta", "symbol": "", "fmin_hz": 4.0, "fmax_hz": 8.0},
@@ -987,6 +1032,30 @@ def load_config(config_path: str) -> AppConfig:
         raise ValueError("signal.psd.variance_step_sec 对应的采样点数必须不少于 1")
     if not math.isfinite(psd_variance_floor_uv2) or psd_variance_floor_uv2 <= 0:
         raise ValueError("signal.psd.variance_floor_uv2 必须为正数")
+    if not math.isfinite(quality_lowcut_hz) or quality_lowcut_hz <= 0:
+        raise ValueError("signal.psd.quality.lowcut_hz 必须为正数")
+    if not math.isfinite(quality_highcut_hz) or quality_highcut_hz >= nyq:
+        raise ValueError("signal.psd.quality.highcut_hz 必须小于 Nyquist")
+    if quality_lowcut_hz >= quality_highcut_hz:
+        raise ValueError("signal.psd.quality 必须满足 lowcut_hz < highcut_hz")
+    if quality_filter_order < 1 or quality_filter_order > 12:
+        raise ValueError("signal.psd.quality.filter_order 必须在 1 到 12 之间")
+    if not math.isfinite(quality_window_sec) or quality_window_sec <= 0:
+        raise ValueError("signal.psd.quality.window_sec 必须为正数")
+    if not math.isfinite(quality_step_sec) or quality_step_sec <= 0 or quality_step_sec > quality_window_sec:
+        raise ValueError("signal.psd.quality.step_sec 必须为正数且不大于 window_sec")
+    if not math.isfinite(quality_relative_energy_ratio) or quality_relative_energy_ratio <= 1:
+        raise ValueError("signal.psd.quality.relative_energy_ratio 必须大于 1")
+    if not math.isfinite(quality_absolute_energy_threshold_uv2) or quality_absolute_energy_threshold_uv2 <= 0:
+        raise ValueError("signal.psd.quality.absolute_energy_threshold_uv2 必须为正数")
+    if quality_exclude_windows < 1 or quality_exclude_windows > 1000:
+        raise ValueError("signal.psd.quality.exclude_windows 必须在 1 到 1000 之间")
+    if quality_recovery_windows < 1 or quality_recovery_windows > 1000:
+        raise ValueError("signal.psd.quality.recovery_windows 必须在 1 到 1000 之间")
+    if quality_min_valid_channels < 3 or quality_min_valid_channels > n_channels:
+        raise ValueError("signal.psd.quality.min_valid_channels 必须在 3 到 eeg.n_channels 之间")
+    if n_channels - len(quality_bad_channels) < quality_min_valid_channels:
+        raise ValueError("signal.psd.quality.bad_channels 必须至少保留 min_valid_channels 个通道")
     if not isinstance(psd_bands_raw, list) or len(psd_bands_raw) != 5:
         raise ValueError("signal.psd.bands 必须配置且仅配置五个频带")
     psd_bands: List[PsdBandConfig] = []
@@ -1037,6 +1106,21 @@ def load_config(config_path: str) -> AppConfig:
             variance_step_sec=psd_variance_step_sec,
             variance_floor_uv2=psd_variance_floor_uv2,
             bands=psd_bands,
+            quality=ChannelQualityConfig(
+                automatic_enabled=quality_automatic_enabled,
+                manual_enabled=quality_manual_enabled,
+                bad_channels=quality_bad_channels,
+                lowcut_hz=quality_lowcut_hz,
+                highcut_hz=quality_highcut_hz,
+                filter_order=quality_filter_order,
+                window_sec=quality_window_sec,
+                step_sec=quality_step_sec,
+                relative_energy_ratio=quality_relative_energy_ratio,
+                absolute_energy_threshold_uv2=quality_absolute_energy_threshold_uv2,
+                exclude_windows=quality_exclude_windows,
+                recovery_windows=quality_recovery_windows,
+                min_valid_channels=quality_min_valid_channels,
+            ),
         ),
     )
 

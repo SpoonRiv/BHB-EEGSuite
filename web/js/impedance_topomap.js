@@ -183,6 +183,7 @@ function createElectrodeMap(hostEl, channelNames, positions, aliases, groupClass
 
   const circles = new Map();
   const groups = new Map();
+  const texts = new Map();
   const names = Array.isArray(channelNames) ? channelNames : [];
   const total = names.length;
   const r = total >= 60 ? 2.7 : (total >= 40 ? 3.2 : 4.4);
@@ -217,11 +218,12 @@ function createElectrodeMap(hostEl, channelNames, positions, aliases, groupClass
     svg.appendChild(g);
     circles.set(name, circle);
     groups.set(name, g);
+    texts.set(name, text);
   }
 
   hostEl.innerHTML = '';
   hostEl.appendChild(svg);
-  return { circles, groups };
+  return { circles, groups, texts };
 }
 
 /**
@@ -247,7 +249,7 @@ export function createSelectableTopomap(hostEl, channelNames, positions, aliases
     : maxCount;
   const onReject = typeof opts.onReject === 'function' ? opts.onReject : null;
 
-  const { groups } = createElectrodeMap(
+  const { groups, texts } = createElectrodeMap(
     hostEl,
     channelNames,
     positions,
@@ -256,15 +258,47 @@ export function createSelectableTopomap(hostEl, channelNames, positions, aliases
   );
 
   let selected = [];
+  let quality = {};
+  let qualityVisible = false;
+  let interactionMode = 'select';
   let onSelect = null;
+  let onManualToggle = null;
 
   function paint() {
     for (const [n, g] of groups.entries()) {
       const index = selected.indexOf(n);
-      g.classList.toggle('selected', index >= 0);
-      g.classList.toggle('selected-1', index === 0);
-      g.classList.toggle('selected-2', index === 1);
-      g.setAttribute('aria-pressed', index >= 0 ? 'true' : 'false');
+      const item = quality[n] && typeof quality[n] === 'object' ? quality[n] : {};
+      const state = String(item.state || 'unknown');
+      const manuallyExcluded = qualityVisible && (
+        state === 'manual_bad' || item.manual_enabled === false
+      );
+      const selectionVisible = interactionMode !== 'manual-quality';
+      const qualityClass = state === 'manual_bad'
+        ? 'quality-manual-bad'
+        : ['good', 'suspect', 'recovering', 'bad'].includes(state)
+          ? `quality-${state}`
+          : 'quality-unknown';
+      g.classList.remove(
+        'quality-good',
+        'quality-suspect',
+        'quality-recovering',
+        'quality-bad',
+        'quality-manual-bad',
+        'quality-unknown',
+      );
+      if (qualityVisible) g.classList.add(qualityClass);
+      g.classList.toggle('selected', selectionVisible && index >= 0);
+      g.classList.toggle('selected-1', selectionVisible && index === 0);
+      g.classList.toggle('selected-2', selectionVisible && index === 1);
+      g.classList.toggle('manual-quality-mode', interactionMode === 'manual-quality');
+      const text = texts.get(n);
+      if (text) text.textContent = manuallyExcluded ? '×' : n;
+      g.setAttribute('aria-pressed', interactionMode === 'manual-quality'
+        ? (item.manual_enabled === false ? 'true' : 'false')
+        : (index >= 0 ? 'true' : 'false'));
+      g.setAttribute('aria-label', interactionMode === 'manual-quality'
+        ? `${item.manual_enabled === false ? '启用' : '停用'}通道 ${n}`
+        : `选择通道 ${n}`);
     }
   }
 
@@ -277,16 +311,24 @@ export function createSelectableTopomap(hostEl, channelNames, positions, aliases
     paint();
   }
 
+  function setQuality(snapshot) {
+    qualityVisible = !!(snapshot && snapshot.channels && typeof snapshot.channels === 'object');
+    quality = qualityVisible ? snapshot.channels : {};
+    paint();
+  }
+
   function toggle(name) {
+    if (interactionMode === 'manual-quality') {
+      if (onManualToggle) onManualToggle(name);
+      return;
+    }
     const index = selected.indexOf(name);
     if (index >= 0) {
-      // 已选：数量允许时取消，否则忽略
       if (selected.length > minCount) selected.splice(index, 1);
       else return;
     } else if (selected.length < maxCount) {
       selected.push(name);
     } else if (maxCount === 1) {
-      // 单选兼容：保持旧的"直接替换"行为
       selected = [name];
     } else {
       if (onReject) onReject(name);
@@ -296,23 +338,44 @@ export function createSelectableTopomap(hostEl, channelNames, positions, aliases
     if (onSelect) onSelect(selected.slice());
   }
 
-  function setOnSelect(fn) {
-    onSelect = typeof fn === 'function' ? fn : null;
+  function bindInteraction() {
+    const enabled = !!onSelect || !!onManualToggle;
     for (const [n, g] of groups.entries()) {
       g.setAttribute('role', 'button');
-      g.setAttribute('tabindex', onSelect ? '0' : '-1');
-      g.setAttribute('aria-label', `选择通道 ${n}`);
-      g.onclick = onSelect ? () => toggle(n) : null;
-      g.onkeydown = onSelect ? (event) => {
+      g.setAttribute('tabindex', enabled ? '0' : '-1');
+      g.onclick = enabled ? () => toggle(n) : null;
+      g.onkeydown = enabled ? (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         toggle(n);
       } : null;
     }
+    paint();
+  }
+
+  function setOnSelect(fn) {
+    onSelect = typeof fn === 'function' ? fn : null;
+    bindInteraction();
+  }
+
+  function setOnManualToggle(fn) {
+    onManualToggle = typeof fn === 'function' ? fn : null;
+    bindInteraction();
+  }
+
+  function setInteractionMode(mode) {
+    interactionMode = mode === 'manual-quality' ? 'manual-quality' : 'select';
+    paint();
   }
 
   setSelected([]);
-  return { setSelected, setOnSelect };
+  return {
+    setSelected,
+    setQuality,
+    setInteractionMode,
+    setOnSelect,
+    setOnManualToggle,
+  };
 }
 
 export function createImpedanceTopomap(hostEl, channelNames, ui, positions, aliases) {

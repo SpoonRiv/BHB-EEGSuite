@@ -5,7 +5,14 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
 作者: Spoon
 */
 
-import { triggerStart, triggerStop } from './api.js';
+import {
+  getSignalQuality,
+  getSignalQualitySnapshot,
+  setSignalQuality,
+  setSignalQualityManualChannels,
+  triggerStart,
+  triggerStop,
+} from './api.js';
 import { createSelectableTopomap } from './impedance_topomap.js';
 
 const PSD_DISPLAY_MIN_HZ = 1;
@@ -14,7 +21,8 @@ const VARIANCE_TREND_WINDOW_MS = 30000;
 const VARIANCE_DISPLAY_SCALE = 10000;
 const VARIANCE_DISPLAY_UNIT = '×10⁴ μV²';
 
-const MAP_HINT_DEFAULT = '点击电极选择通道，最多 2 个进入对比视图，再次点击取消';
+const MAP_HINT_DEFAULT = '点选电极分析单一通道，点选2个进入对比视图。';
+const MAP_HINT_FULL_CHANNEL = '全通道分析已开启，图表显示全通道平均结果。';
 const MAP_HINT_WARN = '最多对比 2 个通道，请先取消一个';
 
 const GEAR_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
@@ -80,7 +88,8 @@ export class EegPsdView {
   }) {
     this.channelNames = Array.isArray(channelNames) ? channelNames.map(String) : [];
     this.mode = 'time';
-    this.scopeMode = 'channel';
+    // Keep the original default: the frequency view starts with all-channel analysis.
+    this.scopeMode = 'average';
     this.bandMetricMode = 'energy';
     this.activeChannels = this.channelNames.length ? [this.channelNames[0]] : [];
     this.psdWs = null;
@@ -93,6 +102,11 @@ export class EegPsdView {
     this.psdPayload = null;
     this.variancePayload = null;
     this.varianceHistory = [];
+    this.channelQuality = null;
+    this.qualityPolicy = null;
+    this.manualQualityMode = false;
+    this.qualityBusy = false;
+    this.qualityError = '';
     this.theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 
     this.elControls = null;
@@ -109,6 +123,14 @@ export class EegPsdView {
     this.elBandMetricControls = null;
     this.elSettingsPopover = null;
     this.elLegend = null;
+    this.elAnalysisModeSection = null;
+    this.elTopomapSection = null;
+    this.elQualitySettings = null;
+    this.elQualityAutomatic = null;
+    this.elQualitySummary = null;
+    this.elQualityDetails = null;
+    this.elQualityManage = null;
+    this.elQualityError = null;
 
     this.spectrumChart = null;
     this.bandChart = null;
@@ -152,8 +174,10 @@ export class EegPsdView {
     this._buildSettingsPopover();
     this._buildBandMetricControls();
     this._initTopomap();
+    this._syncScopeControls();
     this._initCharts();
     this.setMode(this.mode, true);
+    this._loadChannelQuality();
   }
 
   setTheme(theme) {
@@ -220,6 +244,10 @@ export class EegPsdView {
         if (kind === 'variance' && msg && msg.type === 'variance_data' && msg.data) {
           this[attemptKey] = 0;
           this.variancePayload = msg.data;
+          if (msg.data.quality && typeof msg.data.quality === 'object') {
+            this.channelQuality = msg.data.quality;
+            this._renderChannelQuality();
+          }
           this._appendVarianceHistory(msg.data);
           this._renderIfReady();
         }
@@ -251,6 +279,7 @@ export class EegPsdView {
   dispose() {
     this.disposed = true;
     this.close();
+    this._clearMapHintWarn();
     for (const chart of [this.spectrumChart, this.bandChart, this.varianceChart]) {
       if (!chart) continue;
       try { chart.dispose(); } catch (_) {}
@@ -366,6 +395,34 @@ export class EegPsdView {
     const body = document.createElement('div');
     body.className = 'eeg-settings-popover-body';
 
+    const analysis = document.createElement('section');
+    analysis.className = 'eeg-settings-section eeg-analysis-mode-card';
+    const analysisTitle = document.createElement('div');
+    analysisTitle.className = 'eeg-settings-section-title';
+    analysisTitle.textContent = '分析模式';
+    analysis.appendChild(analysisTitle);
+
+    const analysisRow = document.createElement('div');
+    analysisRow.className = 'eeg-settings-row eeg-analysis-mode-row';
+    const analysisLabel = document.createElement('span');
+    analysisLabel.className = 'eeg-settings-label';
+    analysisLabel.textContent = '全通道分析';
+    const analysisSwitch = document.createElement('label');
+    analysisSwitch.className = 'ios-switch';
+    analysisSwitch.title = '开启显示全通道平均结果，关闭后可选择单通道或双通道对比';
+    const analysisInput = document.createElement('input');
+    analysisInput.type = 'checkbox';
+    analysisInput.checked = this.scopeMode === 'average';
+    analysisInput.setAttribute('role', 'switch');
+    analysisInput.setAttribute('aria-label', '全通道分析');
+    analysisInput.onchange = () => this._setScopeMode(analysisInput.checked ? 'average' : 'channel');
+    const analysisSlider = document.createElement('span');
+    analysisSlider.className = 'ios-slider';
+    analysisSwitch.append(analysisInput, analysisSlider);
+    analysisRow.append(analysisLabel, analysisSwitch);
+    analysis.appendChild(analysisRow);
+    body.appendChild(analysis);
+
     const sec2 = document.createElement('div');
     sec2.className = 'eeg-settings-section eeg-settings-topomap-section';
     const sec2Title = document.createElement('div');
@@ -385,6 +442,52 @@ export class EegPsdView {
     mapHost.className = 'topomap-svg band-power-map';
     mapWrap.appendChild(mapHost);
     sec2.appendChild(mapWrap);
+
+    const quality = document.createElement('div');
+    quality.className = 'eeg-quality-settings';
+    quality.hidden = this.scopeMode !== 'average';
+
+    const qualityTitle = document.createElement('div');
+    qualityTitle.className = 'eeg-settings-section-title eeg-quality-settings-title';
+    qualityTitle.textContent = '通道质量';
+    quality.appendChild(qualityTitle);
+
+    const automaticRow = document.createElement('label');
+    automaticRow.className = 'eeg-quality-toggle-row';
+    const automaticLabel = document.createElement('span');
+    automaticLabel.textContent = '自动排除异常通道';
+    const automaticInput = document.createElement('input');
+    automaticInput.type = 'checkbox';
+    automaticInput.setAttribute('aria-label', '自动排除异常通道');
+    automaticInput.onchange = () => this._setQualityAutomatic(automaticInput.checked);
+    automaticRow.append(automaticLabel, automaticInput);
+    quality.appendChild(automaticRow);
+
+    const summary = document.createElement('div');
+    summary.className = 'eeg-quality-summary-line';
+    summary.textContent = '有效通道 --/--';
+    quality.appendChild(summary);
+
+    const details = document.createElement('div');
+    details.className = 'eeg-quality-details';
+    details.textContent = '等待质量数据';
+    quality.appendChild(details);
+
+    const manage = document.createElement('button');
+    manage.type = 'button';
+    manage.className = 'btn btn--ghost eeg-quality-manage-btn';
+    manage.textContent = '管理手动排除通道';
+    manage.setAttribute('aria-pressed', 'false');
+    manage.onclick = () => this._setManualQualityMode(!this.manualQualityMode);
+    quality.appendChild(manage);
+
+    const error = document.createElement('div');
+    error.className = 'eeg-quality-error';
+    error.hidden = true;
+    error.setAttribute('role', 'status');
+    quality.appendChild(error);
+
+    sec2.appendChild(quality);
     body.appendChild(sec2);
 
     popover.appendChild(body);
@@ -395,6 +498,15 @@ export class EegPsdView {
     this.settingsToggleBtn = toggleBtn;
     this.elSettingsPopover = popover;
     this.elMapHint = mapHint;
+    this.elAnalysisModeSection = analysis;
+    this.elTopomapSection = sec2;
+    this.scopeToggle = analysisInput;
+    this.elQualitySettings = quality;
+    this.elQualityAutomatic = automaticInput;
+    this.elQualitySummary = summary;
+    this.elQualityDetails = details;
+    this.elQualityManage = manage;
+    this.elQualityError = error;
   }
 
   _buildBandMetricControls() {
@@ -455,7 +567,140 @@ export class EegPsdView {
     );
     if (!this.topomap) return;
     this.topomap.setOnSelect((list) => this._setActiveChannels(list));
+    this.topomap.setOnManualToggle((name) => this._toggleManualQualityChannel(name));
     this.topomap.setSelected(this.activeChannels);
+    this._syncTopomapQuality();
+  }
+
+  _syncTopomapQuality() {
+    if (!this.topomap) return;
+    this.topomap.setQuality(this.scopeMode === 'average' ? this.channelQuality : null);
+  }
+
+  async _loadChannelQuality() {
+    try {
+      const [policy, snapshot] = await Promise.all([
+        getSignalQuality(),
+        getSignalQualitySnapshot(),
+      ]);
+      if (this.disposed) return;
+      this.qualityPolicy = policy && typeof policy === 'object' ? policy : {};
+      this.channelQuality = snapshot && typeof snapshot === 'object' ? snapshot : null;
+      this.qualityError = '';
+    } catch (error) {
+      if (this.disposed) return;
+      this.qualityError = error instanceof Error ? error.message : '通道质量加载失败';
+    }
+    this._renderChannelQuality();
+  }
+
+  async _setQualityAutomatic(enabled) {
+    if (this.qualityBusy) return;
+    this.qualityBusy = true;
+    this.qualityError = '';
+    this._renderChannelQuality();
+    try {
+      const policy = await setSignalQuality({ automatic_enabled: !!enabled });
+      if (this.disposed) return;
+      this.qualityPolicy = policy && typeof policy === 'object' ? policy : {};
+      if (this.channelQuality) this.channelQuality.automatic_enabled = !!enabled;
+    } catch (error) {
+      if (this.disposed) return;
+      this.qualityError = error instanceof Error ? error.message : '自动排除设置失败';
+    } finally {
+      this.qualityBusy = false;
+      this._renderChannelQuality();
+    }
+  }
+
+  _setManualQualityMode(enabled) {
+    this.manualQualityMode = !!enabled;
+    this.qualityError = '';
+    if (this.topomap) {
+      this.topomap.setInteractionMode(this.manualQualityMode ? 'manual-quality' : 'select');
+    }
+    this._syncScopeControls();
+    this._renderChannelQuality();
+  }
+
+  async _toggleManualQualityChannel(name) {
+    if (!this.manualQualityMode || this.qualityBusy) return;
+    const snapshot = this.channelQuality && typeof this.channelQuality === 'object'
+      ? this.channelQuality
+      : {};
+    const current = Array.isArray(snapshot.manual_excluded_channels)
+      ? snapshot.manual_excluded_channels.map(String)
+      : [];
+    const next = current.includes(name)
+      ? current.filter((item) => item !== name)
+      : [...current, name];
+    this.qualityBusy = true;
+    this.qualityError = '';
+    this._renderChannelQuality();
+    try {
+      const result = await setSignalQualityManualChannels(next);
+      if (this.disposed) return;
+      this.channelQuality = result && typeof result === 'object' ? result : snapshot;
+    } catch (error) {
+      if (this.disposed) return;
+      this.qualityError = error instanceof Error ? error.message : '手动排除设置失败';
+    } finally {
+      this.qualityBusy = false;
+      if (!this.disposed) this._renderChannelQuality();
+    }
+  }
+
+  _renderChannelQuality() {
+    const snapshot = this.channelQuality && typeof this.channelQuality === 'object'
+      ? this.channelQuality
+      : {};
+    const policy = this.qualityPolicy && typeof this.qualityPolicy === 'object'
+      ? this.qualityPolicy
+      : {};
+    const automaticEnabled = typeof snapshot.automatic_enabled === 'boolean'
+      ? snapshot.automatic_enabled
+      : !!policy.automatic_enabled;
+    const total = Number.isFinite(Number(snapshot.total_channel_count))
+      ? Number(snapshot.total_channel_count)
+      : this.channelNames.length;
+    const valid = Number.isFinite(Number(snapshot.valid_channel_count))
+      ? Number(snapshot.valid_channel_count)
+      : total;
+    const automatic = Array.isArray(snapshot.automatic_bad_channels)
+      ? snapshot.automatic_bad_channels.map(String)
+      : [];
+    const manual = Array.isArray(snapshot.manual_excluded_channels)
+      ? snapshot.manual_excluded_channels.map(String)
+      : [];
+    if (this.elQualityAutomatic) {
+      this.elQualityAutomatic.checked = automaticEnabled;
+      this.elQualityAutomatic.disabled = this.qualityBusy;
+    }
+    if (this.elQualitySummary) {
+      this.elQualitySummary.textContent = `有效通道 ${valid}/${total}`;
+    }
+    if (this.elQualityDetails) {
+      this.elQualityDetails.textContent = snapshot.ready === false
+        ? '质量检测预热中'
+        : `自动排除 ${automatic.length ? automatic.join('、') : '无'} · 手动停用 ${manual.length ? manual.join('、') : '无'}`;
+    }
+    if (this.elQualityManage) {
+      this.elQualityManage.disabled = this.qualityBusy;
+      this.elQualityManage.classList.toggle('is-active', this.manualQualityMode);
+      this.elQualityManage.setAttribute('aria-pressed', this.manualQualityMode ? 'true' : 'false');
+      this.elQualityManage.textContent = this.manualQualityMode ? '完成手动排除' : '管理手动排除通道';
+    }
+    if (this.elQualityError) {
+      this.elQualityError.hidden = !this.qualityError;
+      this.elQualityError.textContent = this.qualityError;
+    }
+    if (this.elMapHint && this.manualQualityMode) {
+      this.elMapHint.textContent = '点击电极切换手动启用或停用';
+      this.elMapHint.classList.remove('is-warn');
+    } else if (this.elMapHint && this.hintWarnTimer === null) {
+      this._restoreMapHint();
+    }
+    this._syncTopomapQuality();
   }
 
   _setSettingsPopoverOpen(open) {
@@ -466,7 +711,36 @@ export class EegPsdView {
       this.settingsToggleBtn.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
     }
     if (shouldOpen && this.topomap) this.topomap.setSelected(this.activeChannels);
-    if (!shouldOpen) this._clearMapHintWarn();
+    if (!shouldOpen) {
+      this._setManualQualityMode(false);
+      this._clearMapHintWarn();
+    }
+  }
+
+  _setScopeMode(mode) {
+    const next = mode === 'channel' ? 'channel' : 'average';
+    this.scopeMode = next;
+    if (!this.activeChannels.length && this.channelNames.length) this.activeChannels = [this.channelNames[0]];
+    this._syncScopeControls();
+    this._renderIfReady();
+    requestAnimationFrame(() => this.resize());
+  }
+
+  _syncScopeControls() {
+    const isFullChannel = this.scopeMode === 'average';
+    if (this.scopeToggle) this.scopeToggle.checked = isFullChannel;
+    if (this.elTopomapSection) {
+      this.elTopomapSection.classList.toggle('is-dim', isFullChannel && !this.manualQualityMode);
+    }
+    if (this.elQualitySettings) this.elQualitySettings.hidden = !isFullChannel;
+    if (!isFullChannel && this.manualQualityMode) {
+      this.manualQualityMode = false;
+      if (this.topomap) this.topomap.setInteractionMode('select');
+    }
+    this._syncTopomapQuality();
+    if (this.elMapHint && this.hintWarnTimer === null && !this.manualQualityMode) {
+      this._restoreMapHint();
+    }
   }
 
   _initCharts() {
@@ -502,7 +776,9 @@ export class EegPsdView {
 
   _restoreMapHint() {
     if (!this.elMapHint) return;
-    this.elMapHint.textContent = MAP_HINT_DEFAULT;
+    this.elMapHint.textContent = this.scopeMode === 'average'
+      ? MAP_HINT_FULL_CHANNEL
+      : MAP_HINT_DEFAULT;
     this.elMapHint.classList.remove('is-warn');
   }
 

@@ -284,6 +284,21 @@ class AppState:
                     variance_window_sec=float(getattr(psd_cfg, "variance_window_sec", 0.5)),
                     variance_step_sec=float(getattr(psd_cfg, "variance_step_sec", 0.1)),
                     variance_floor_uv2=float(getattr(psd_cfg, "variance_floor_uv2", 1e-12)),
+                    quality_automatic_enabled=bool(psd_cfg.quality.automatic_enabled),
+                    quality_manual_enabled=bool(psd_cfg.quality.manual_enabled),
+                    quality_bad_channels=tuple(psd_cfg.quality.bad_channels),
+                    quality_lowcut_hz=float(psd_cfg.quality.lowcut_hz),
+                    quality_highcut_hz=float(psd_cfg.quality.highcut_hz),
+                    quality_filter_order=int(psd_cfg.quality.filter_order),
+                    quality_window_sec=float(psd_cfg.quality.window_sec),
+                    quality_step_sec=float(psd_cfg.quality.step_sec),
+                    quality_relative_energy_ratio=float(psd_cfg.quality.relative_energy_ratio),
+                    quality_absolute_energy_threshold_uv2=float(
+                        psd_cfg.quality.absolute_energy_threshold_uv2
+                    ),
+                    quality_exclude_windows=int(psd_cfg.quality.exclude_windows),
+                    quality_recovery_windows=int(psd_cfg.quality.recovery_windows),
+                    quality_min_valid_channels=int(psd_cfg.quality.min_valid_channels),
                     bands=tuple(
                         PsdBandDefinition(
                             key=str(band.key),
@@ -479,6 +494,38 @@ class AppState:
         signal_raw["psd"] = psd_raw
         raw["signal"] = signal_raw
         self._save_local_raw(raw)
+
+    def get_quality_policy(self) -> Dict[str, object]:
+        """返回当前坏通道质量策略。"""
+        quality = self.config.signal.psd.quality
+        return {
+            "automatic_enabled": bool(quality.automatic_enabled),
+            "manual_enabled": bool(quality.manual_enabled),
+            "bad_channels": list(quality.bad_channels),
+            "lowcut_hz": float(quality.lowcut_hz),
+            "highcut_hz": float(quality.highcut_hz),
+            "filter_order": int(quality.filter_order),
+            "window_sec": float(quality.window_sec),
+            "step_sec": float(quality.step_sec),
+            "relative_energy_ratio": float(quality.relative_energy_ratio),
+            "absolute_energy_threshold_uv2": float(
+                quality.absolute_energy_threshold_uv2
+            ),
+            "exclude_windows": int(quality.exclude_windows),
+            "recovery_windows": int(quality.recovery_windows),
+            "min_valid_channels": int(quality.min_valid_channels),
+        }
+
+    def save_quality_policy(self, policy: Dict[str, object]) -> None:
+        """将坏通道质量策略写入本机覆盖配置并刷新内存配置。"""
+        raw = self._load_local_raw()
+        signal_raw = raw.get("signal", {}) if isinstance(raw.get("signal", {}), dict) else {}
+        psd_raw = signal_raw.get("psd", {}) if isinstance(signal_raw.get("psd", {}), dict) else {}
+        psd_raw["quality"] = dict(policy)
+        signal_raw["psd"] = psd_raw
+        raw["signal"] = signal_raw
+        self._save_local_raw(raw)
+        self.config = load_config(self.config_path)
 
     def get_pending_channel_selection(self) -> Tuple[int, List[str], str]:
         raw = self._load_local_raw()
@@ -807,6 +854,8 @@ class AppState:
             self.offline.append_chunk(chunk)
         except Exception:
             pass
+        # Keep the time-domain path independent from optional PSD/quality analysis.
+        self.eeg_ws_hub.enqueue(chunk)
         if self.psd_worker is not None and self._analysis_ingest_queue is not None:
             has_analysis_clients = bool(
                 self.psd_ws_hub.has_clients()
@@ -814,10 +863,9 @@ class AppState:
             )
             if has_analysis_clients:
                 try:
-                    self._analysis_ingest_queue.put(chunk, timeout=0.2)
-                except (queue.Full, queue.Empty):
+                    self._analysis_ingest_queue.put_nowait(chunk)
+                except queue.Full:
                     pass
-        self.eeg_ws_hub.enqueue(chunk)
 
     def on_imp_lsl_chunk(self, chunk: List[List[float]]) -> None:
         """
@@ -1417,6 +1465,7 @@ async def get_config():
                 "car_enabled": bool(getattr(state.config.signal.psd, "car_enabled", True)),
                 "band_filter_order": int(getattr(state.config.signal.psd, "band_filter_order", 4)),
                 "variance_floor_uv2": float(getattr(state.config.signal.psd, "variance_floor_uv2", 1e-12)),
+                "quality": state.get_quality_policy(),
                 "bands": [
                     {
                         "key": str(band.key),
@@ -1456,6 +1505,14 @@ class SignalBandsUpdateRequest(BaseModel):
     bands: List[SignalBandRequest]
 
 
+class ChannelQualityUpdateRequest(BaseModel):
+    automatic_enabled: bool
+
+
+class ChannelQualityManualRequest(BaseModel):
+    bad_channels: List[str]
+
+
 @app.get("/api/signal/bands")
 async def get_signal_bands() -> Dict[str, object]:
     """返回当前在线分析使用的五频带与因果预处理配置。"""
@@ -1476,6 +1533,58 @@ async def get_signal_bands() -> Dict[str, object]:
         "variance_floor_uv2": float(psd_config.variance_floor_uv2),
         "sampling_rate_hz": int(state.config.eeg.sampling_rate_hz),
     }
+
+
+@app.get("/api/signal/quality")
+async def get_signal_quality() -> Dict[str, object]:
+    """返回当前坏通道质量策略。"""
+    return await asyncio.to_thread(state.get_quality_policy)
+
+
+@app.get("/api/signal/quality/snapshot")
+async def get_signal_quality_snapshot() -> Dict[str, object]:
+    """返回当前在线质量状态及有效通道摘要。"""
+    if state.psd_worker is None:
+        return {
+            "enabled": False,
+            "automatic_enabled": False,
+            "manual_enabled": False,
+            "channels": {},
+        }
+    return await asyncio.to_thread(state.psd_worker.get_quality_snapshot)
+
+
+@app.post("/api/signal/quality/manual")
+async def update_signal_quality_manual(req: ChannelQualityManualRequest) -> Dict[str, object]:
+    """更新手动排除通道并持久化。"""
+    if state.psd_worker is None:
+        raise HTTPException(status_code=503, detail="在线质量分析器不可用")
+    bad_channels = [str(x or "").strip() for x in req.bad_channels or [] if str(x or "").strip()]
+    policy = state.get_quality_policy()
+    policy["bad_channels"] = list(dict.fromkeys(bad_channels))
+    try:
+        result = await asyncio.to_thread(state.psd_worker.set_manual_bad_channels, policy["bad_channels"])
+        await asyncio.to_thread(state.save_quality_policy, policy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "success", **result}
+
+
+@app.post("/api/signal/quality")
+async def update_signal_quality(req: ChannelQualityUpdateRequest) -> Dict[str, object]:
+    """仅更新自动坏通道开关，算法阈值继续由配置文件管理。"""
+    policy = state.get_quality_policy()
+    policy["automatic_enabled"] = bool(req.automatic_enabled)
+    try:
+        if state.psd_worker is not None:
+            await asyncio.to_thread(
+                state.psd_worker.set_quality_automatic_enabled,
+                bool(req.automatic_enabled),
+            )
+        await asyncio.to_thread(state.save_quality_policy, policy)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存自动排除开关失败: {exc}") from exc
+    return {"status": "success", **policy}
 
 
 @app.post("/api/signal/bands")

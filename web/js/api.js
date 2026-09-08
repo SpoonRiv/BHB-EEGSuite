@@ -187,3 +187,27 @@ export async function setSignalBandpass(payload) {
     body: JSON.stringify(payload || {}),
   });
 }
+
+export async function getSignalQuality() {
+  return fetchJson('/api/signal/quality');
+}
+
+export async function setSignalQuality(payload) {
+  return fetchJson('/api/signal/quality', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
+  });
+}
+
+export async function getSignalQualitySnapshot() {
+  return fetchJson('/api/signal/quality/snapshot');
+}
+
+export async function setSignalQualityManualChannels(channelNames) {
+  return fetchJson('/api/signal/quality/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bad_channels: Array.isArray(channelNames) ? channelNames : [] }),
+  });
+}

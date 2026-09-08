@@ -59,6 +59,7 @@ let eegScrollCheckRequested = false;
 let eegGridScrollHandler = null;
 let eegResizeHandler = null;
 let eegResizeListenerAttached = false;
+let eegChartResizeObserver = null;
 let eegWsMaxPendingChunks = 2;
 let eegPendingEegChunks = [];
 
@@ -175,17 +176,53 @@ function renderEegSubtitle() {
 
 function resizeEegVisualsAfterLayout() {
   const resizeNow = () => {
-    if (!eegPageActive) return;
-    for (const chart of charts) {
+    if (!eegPageActive || eegViewMode !== 'time') return;
+    for (let i = 0; i < charts.length; i++) {
+      const chart = charts[i];
       if (!chart) continue;
-      try { chart.resize(); } catch (_) {}
+      const chartEl = document.getElementById(`chart-ch${i}`);
+      const rect = chartEl ? chartEl.getBoundingClientRect() : null;
+      try {
+        if (rect && rect.width > 0 && rect.height > 0) {
+          chart.resize({
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            silent: true,
+          });
+        } else {
+          chart.resize();
+        }
+      } catch (_) {}
     }
-    if (psdView && typeof psdView.resize === 'function') psdView.resize();
     scheduleVisibleUpdate(true);
   };
   requestAnimationFrame(resizeNow);
+  requestAnimationFrame(() => requestAnimationFrame(resizeNow));
   window.setTimeout(resizeNow, 160);
   window.setTimeout(resizeNow, 340);
+}
+
+function observeEegChartLayout() {
+  if (eegChartResizeObserver) eegChartResizeObserver.disconnect();
+  if (typeof ResizeObserver !== 'function') return;
+  const timeView = document.getElementById('eeg-time-view');
+  const grid = document.getElementById('charts-grid');
+  if (!timeView || !grid) return;
+  let previousWidth = -1;
+  let previousHeight = -1;
+  eegChartResizeObserver = new ResizeObserver(() => {
+    if (!eegPageActive || eegViewMode !== 'time') return;
+    const rect = grid.getBoundingClientRect();
+    const width = Math.round(rect.width);
+    const height = Math.round(rect.height);
+    if (width <= 0 || height <= 0) return;
+    if (width === previousWidth && height === previousHeight) return;
+    previousWidth = width;
+    previousHeight = height;
+    resizeEegVisualsAfterLayout();
+  });
+  eegChartResizeObserver.observe(timeView);
+  eegChartResizeObserver.observe(grid);
 }
 
 function syncEegFocusLayoutMetrics(layout, debugBody) {
@@ -1201,9 +1238,11 @@ export async function enterEegPage() {
     onModeChange: (m) => {
       eegViewMode = m === 'psd' ? 'psd' : 'time';
       closeTimeSettingsPopover();
+      if (eegViewMode === 'time') resizeEegVisualsAfterLayout();
     }
   });
   initCharts();
+  observeEegChartLayout();
   if (!eegGridScrollHandler) {
     eegGridScrollHandler = () => {
       scheduleVisibleUpdate(false);
@@ -1340,6 +1379,10 @@ export async function leaveEegPage() {
     try { eegGridEl.removeEventListener('scroll', eegGridScrollHandler); } catch (_) {}
   }
   eegGridEl = null;
+  if (eegChartResizeObserver) {
+    eegChartResizeObserver.disconnect();
+    eegChartResizeObserver = null;
+  }
   if (eegResizeListenerAttached && eegResizeHandler) {
     try { window.removeEventListener('resize', eegResizeHandler); } catch (_) {}
     eegResizeListenerAttached = false;

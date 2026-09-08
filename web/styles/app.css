@@ -3561,6 +3561,23 @@ select option {
   flex-shrink: 0;
 }
 
+.eeg-analysis-mode-card {
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.07);
+}
+
+.eeg-analysis-mode-card .eeg-settings-section-title {
+  margin-top: 0;
+  color: var(--text);
+}
+
+.eeg-analysis-mode-row {
+  margin-bottom: 0;
+}
+
 .eeg-settings-row input[type="number"],
 .eeg-settings-popover input.eeg-settings-num {
   width: 64px;
@@ -3732,11 +3749,16 @@ select option {
 }
 
 .eeg-settings-topomap-section.is-dim {
-  opacity: 0.6;
+  opacity: 1;
 }
 
 .eeg-settings-topomap-section.is-dim .band-channel-map {
+  opacity: 0.6;
   pointer-events: none;
+}
+
+.eeg-settings-topomap-section.is-dim .eeg-settings-hint {
+  opacity: 0.6;
 }
 
 .eeg-settings-popover .band-channel-map.topomap-canvas {
@@ -3780,8 +3802,7 @@ select option {
 
 .eeg-settings-popover .band-power-map .channel-electrode.selected .electrode-circle {
   stroke: rgba(47, 229, 139, 0.92);
-  stroke-width: 0.55;
-  fill: rgba(47, 229, 139, 0.20);
+  stroke-width: 0.9;
 }
 
 .eeg-settings-popover .band-power-map .channel-electrode.selected .electrode-text {
@@ -3796,9 +3817,8 @@ select option {
 
 /* PSD 双通道对比：弹窗作用域内的通道 A / B 色覆盖（同特异性、位置更后，压过上方 .selected 绿色规则；绿色规则保留作兜底） */
 .eeg-settings-popover .band-power-map .channel-electrode.selected-1 .electrode-circle {
-  stroke: rgba(var(--psd-ch-a-rgb), 0.92);
-  stroke-width: 0.55;
-  fill: rgba(var(--psd-ch-a-rgb), 0.20);
+  stroke: rgba(var(--psd-ch-a-rgb), 0.98);
+  stroke-width: 1.1;
 }
 
 .eeg-settings-popover .band-power-map .channel-electrode.selected-1 .electrode-text {
@@ -3812,9 +3832,8 @@ select option {
 }
 
 .eeg-settings-popover .band-power-map .channel-electrode.selected-2 .electrode-circle {
-  stroke: rgba(var(--psd-ch-b-rgb), 0.92);
-  stroke-width: 0.55;
-  fill: rgba(var(--psd-ch-b-rgb), 0.20);
+  stroke: rgba(var(--psd-ch-b-rgb), 0.98);
+  stroke-width: 1.1;
 }
 
 .eeg-settings-popover .band-power-map .channel-electrode.selected-2 .electrode-text {
@@ -3846,6 +3865,131 @@ select option {
 
 [data-theme="light"] .eeg-settings-popover .band-power-map .channel-electrode.selected-2 .electrode-text {
   fill: var(--psd-ch-b);
+}
+
+.eeg-quality-settings {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(140, 170, 210, 0.12);
+}
+
+.eeg-quality-settings[hidden] {
+  display: none;
+}
+
+.eeg-quality-settings-title {
+  margin-top: 0;
+}
+
+.eeg-quality-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.eeg-quality-toggle-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: rgb(var(--accent-rgb));
+}
+
+.eeg-quality-summary-line {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.eeg-quality-details {
+  min-height: 30px;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.eeg-quality-manage-btn {
+  width: 100%;
+  min-height: 28px;
+  margin-top: 5px;
+  border-color: rgba(var(--accent-rgb), 0.28);
+  font-size: 11px;
+}
+
+.eeg-quality-manage-btn.is-active {
+  color: var(--accent-text, rgb(var(--accent-rgb)));
+  border-color: rgba(var(--accent-rgb), 0.65);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.eeg-quality-error {
+  margin-top: 5px;
+  color: var(--warn, #ffcc66);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode .electrode-circle {
+  stroke-width: 0.55;
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-unknown .electrode-circle {
+  fill: rgba(120, 170, 210, 0.08);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-unknown:not(.selected) .electrode-circle {
+  stroke: rgba(170, 195, 220, 0.42);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-good .electrode-circle {
+  fill: rgba(47, 229, 139, 0.10);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-suspect .electrode-circle {
+  fill: rgba(255, 204, 102, 0.22);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-suspect:not(.selected) .electrode-circle {
+  stroke: rgba(255, 204, 102, 0.90);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-recovering .electrode-circle,
+.eeg-settings-popover .band-power-map .channel-electrode.quality-bad .electrode-circle {
+  fill: rgba(255, 102, 102, 0.24);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-recovering:not(.selected) .electrode-circle,
+.eeg-settings-popover .band-power-map .channel-electrode.quality-bad:not(.selected) .electrode-circle {
+  stroke: rgba(255, 102, 102, 0.92);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-manual-bad .electrode-circle {
+  fill: rgba(255, 102, 102, 0.24);
+  stroke-dasharray: 1.2 0.8;
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-manual-bad:not(.selected) .electrode-circle {
+  stroke: rgba(255, 102, 102, 0.92);
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.quality-manual-bad .electrode-text {
+  fill: #ff6666;
+  font-weight: 850;
+}
+
+[data-theme="light"] .eeg-settings-popover .band-power-map .channel-electrode.quality-manual-bad .electrode-text {
+  fill: #d92d20;
+}
+
+.eeg-settings-popover .band-power-map .channel-electrode.manual-quality-mode:hover .electrode-circle {
+  filter: brightness(1.25);
 }
 
 /* Light theme overrides */

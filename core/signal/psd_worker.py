@@ -19,6 +19,8 @@ from typing import Deque, Dict, List, Optional, Tuple
 import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch, sosfilt, welch
 
+from core.signal.channel_quality import ChannelQualityDetector
+
 
 @dataclass(frozen=True)
 class PsdBandDefinition:
@@ -49,6 +51,19 @@ class PsdWorkerConfig:
     variance_step_sec: float
     variance_floor_uv2: float
     bands: Tuple[PsdBandDefinition, ...]
+    quality_automatic_enabled: bool
+    quality_manual_enabled: bool
+    quality_bad_channels: Tuple[str, ...]
+    quality_lowcut_hz: float
+    quality_highcut_hz: float
+    quality_filter_order: int
+    quality_window_sec: float
+    quality_step_sec: float
+    quality_relative_energy_ratio: float
+    quality_absolute_energy_threshold_uv2: float
+    quality_exclude_windows: int
+    quality_recovery_windows: int
+    quality_min_valid_channels: int
 
 
 @dataclass(frozen=True)
@@ -58,6 +73,8 @@ class PsdSnapshot:
     window: np.ndarray
     causal_band_variance: np.ndarray
     timestamp: float
+    valid_channel_mask: np.ndarray
+    quality: Dict[str, object]
 
 
 class PsdWorker:
@@ -101,6 +118,23 @@ class PsdWorker:
         self._variance_step_points = int(
             max(1, round(float(cfg.variance_step_sec) * float(self.sampling_rate_hz)))
         )
+        self._quality_detector = ChannelQualityDetector(
+            sampling_rate_hz=self.sampling_rate_hz,
+            channel_names=self.channel_names,
+            automatic_enabled=cfg.quality_automatic_enabled,
+            manual_enabled=cfg.quality_manual_enabled,
+            bad_channels=cfg.quality_bad_channels,
+            lowcut_hz=cfg.quality_lowcut_hz,
+            highcut_hz=cfg.quality_highcut_hz,
+            filter_order=cfg.quality_filter_order,
+            window_sec=cfg.quality_window_sec,
+            step_sec=cfg.quality_step_sec,
+            relative_energy_ratio=cfg.quality_relative_energy_ratio,
+            absolute_energy_threshold_uv2=cfg.quality_absolute_energy_threshold_uv2,
+            exclude_windows=cfg.quality_exclude_windows,
+            recovery_windows=cfg.quality_recovery_windows,
+            min_valid_channels=cfg.quality_min_valid_channels,
+        )
         self._buf: List[Deque[float]] = [
             deque(maxlen=self._window_points) for _ in range(self.n_channels)
         ]
@@ -127,12 +161,14 @@ class PsdWorker:
         self._data_version = 0
         self._last_psd_snapshot_version = -1
         self._last_variance_snapshot_version = -1
+        self._last_quality_snapshot = self._quality_detector.snapshot()
 
     def reset(self) -> None:
         """清空窗口并重置全部连续因果滤波器状态。"""
         with self._lock:
             for channel_buffer in self._buf:
                 channel_buffer.clear()
+            self._quality_detector.reset()
             for band_buffers in self._band_buf:
                 for channel_buffer in band_buffers:
                     channel_buffer.clear()
@@ -144,6 +180,7 @@ class PsdWorker:
             self._data_version = 0
             self._last_psd_snapshot_version = -1
             self._last_variance_snapshot_version = -1
+            self._last_quality_snapshot = self._quality_detector.snapshot()
 
     def append_chunk(self, chunk: List[List[float]]) -> None:
         """换算并连续摄取一个 EEG 数据块，逐样本应用 CAR 和因果频带滤波。"""
@@ -160,9 +197,12 @@ class PsdWorker:
             eeg = eeg * float(self.units_per_count)
         elif self.count_divisor != 1.0:
             eeg = eeg / float(self.count_divisor)
-        if bool(self.cfg.car_enabled):
-            eeg = eeg - np.mean(eeg, axis=1, keepdims=True)
         with self._lock:
+            self._quality_detector.append(eeg)
+            self._last_quality_snapshot = self._quality_detector.snapshot()
+            valid_mask = self._quality_detector.valid_mask()
+            if bool(self.cfg.car_enabled) and int(np.count_nonzero(valid_mask)) >= 2:
+                eeg = eeg - np.mean(eeg[:, valid_mask], axis=1, keepdims=True)
             for channel_index in range(self.n_channels):
                 self._buf[channel_index].extend(eeg[:, channel_index].tolist())
             for band_index, sos in enumerate(self._band_sos):
@@ -214,6 +254,8 @@ class PsdWorker:
                     self._buf[channel_index],
                     dtype=np.float32,
                 )
+            quality = dict(self._last_quality_snapshot)
+            valid_mask = self._quality_detector.valid_mask()
             causal_variance = np.empty(
                 (self.n_channels, len(self.cfg.bands)),
                 dtype=np.float64,
@@ -227,6 +269,8 @@ class PsdWorker:
                 window=window,
                 causal_band_variance=causal_variance,
                 timestamp=float(time.time()),
+                valid_channel_mask=valid_mask.copy(),
+                quality=quality,
             )
 
     def build_variance_warmup_payload(self) -> Dict[str, object]:
@@ -242,6 +286,7 @@ class PsdWorker:
             "sample_count": int(warmup.get("sample_count", 0)),
             "channels": {},
             "average": [],
+            "quality": self.get_quality_snapshot(),
         }
 
     def snapshot_variance_payload(self) -> Optional[Dict[str, object]]:
@@ -257,6 +302,8 @@ class PsdWorker:
                 return None
             if self._data_version - self._last_variance_snapshot_version < self._variance_step_points:
                 return None
+            quality = dict(self._last_quality_snapshot)
+            valid_mask = self._quality_detector.valid_mask()
             causal_variance = np.empty(
                 (self.n_channels, len(self.cfg.bands)),
                 dtype=np.float64,
@@ -289,7 +336,8 @@ class PsdWorker:
                 str(channel_name): causal_variance[channel_index, :].astype(np.float32).tolist()
                 for channel_index, channel_name in enumerate(self.channel_names)
             },
-            "average": np.mean(causal_variance, axis=0).astype(np.float32).tolist(),
+            "average": self._effective_mean(causal_variance, valid_mask).astype(np.float32).tolist(),
+            "quality": quality,
         }
 
     def compute_psd_payload(self, snapshot: PsdSnapshot) -> Optional[Dict[str, object]]:
@@ -347,7 +395,8 @@ class PsdWorker:
         band_de = 0.5 * np.log(
             2.0 * np.pi * np.e * np.maximum(causal_variance, variance_floor)
         )
-        average_band_power = np.mean(band_power, axis=0)
+        valid_mask = np.asarray(snapshot.valid_channel_mask, dtype=bool)
+        average_band_power = self._effective_mean(band_power, valid_mask)
         average_band_total = float(np.sum(average_band_power))
         average_band_relative_pct = np.divide(
             average_band_power * 100.0,
@@ -355,8 +404,8 @@ class PsdWorker:
             out=np.zeros_like(average_band_power),
             where=average_band_total > 0.0,
         )
-        average_causal_variance = np.mean(causal_variance, axis=0)
-        average_band_de = np.mean(band_de, axis=0)
+        average_causal_variance = self._effective_mean(causal_variance, valid_mask)
+        average_band_de = self._effective_mean(band_de, valid_mask)
         display_freq, display_psd = self._slice_display_spectrum(
             freq,
             linear_psd,
@@ -365,7 +414,7 @@ class PsdWorker:
         )
         if display_freq is None or display_psd is None:
             return None
-        average_psd = np.mean(display_psd, axis=0)
+        average_psd = self._effective_mean(display_psd, valid_mask)
         unit = "uV^2/Hz"
         if bool(self.cfg.to_db):
             display_psd = 10.0 * np.log10(np.maximum(display_psd, 1e-20))
@@ -405,7 +454,8 @@ class PsdWorker:
             },
             "average": {
                 "label": "全通道平均",
-                "channel_count": int(self.n_channels),
+                "channel_count": int(np.count_nonzero(valid_mask)),
+                "total_channel_count": int(self.n_channels),
                 "spectrum": average_psd.astype(np.float32).tolist(),
                 "band_power": {
                     "absolute": average_band_power.astype(np.float32).tolist(),
@@ -415,6 +465,7 @@ class PsdWorker:
                     "total": average_band_total,
                 },
             },
+            "quality": snapshot.quality,
             "variance": {
                 "unit": "uV^2",
                 "channels": {
@@ -440,6 +491,32 @@ class PsdWorker:
                 "normalization_complete": bool(nyquist > self.cfg.bands[-1].fmax_hz),
             },
         }
+
+    def get_quality_snapshot(self) -> Dict[str, object]:
+        """返回最近质量状态和预热进度。"""
+        with self._lock:
+            return self._quality_detector.snapshot()
+
+    def set_quality_automatic_enabled(self, enabled: bool) -> Dict[str, object]:
+        """切换自动坏通道排除并返回最新状态。"""
+        with self._lock:
+            result = self._quality_detector.set_automatic_enabled(enabled)
+            self._last_quality_snapshot = dict(result)
+            return result
+
+    def set_manual_bad_channels(self, channel_names: List[str]) -> Dict[str, object]:
+        """更新手动排除通道并返回新的质量状态快照。"""
+        with self._lock:
+            result = self._quality_detector.set_manual_bad_channels(channel_names)
+            self._last_quality_snapshot = dict(result)
+            return result
+
+    def _effective_mean(self, values: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
+        """仅使用有效通道计算均值，无有效通道时返回零向量。"""
+        mask = np.asarray(valid_mask, dtype=bool)
+        if values.ndim < 2 or mask.size != values.shape[0] or not np.any(mask):
+            return np.zeros(values.shape[1:], dtype=np.float64)
+        return np.mean(values[mask], axis=0)
 
     def get_update_interval_sec(self) -> float:
         """将配置的 PSD 更新频率转换为秒级间隔。"""

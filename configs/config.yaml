@@ -1,5 +1,5 @@
 app:
-  ui_version: "3.3.0"
+  ui_version: "3.4.0"
 
 ui:
   waveform:
@@ -271,6 +271,20 @@ signal:
     variance_window_sec: 0.5
     variance_step_sec: 0.1
     variance_floor_uv2: 1.0e-12
+    quality:
+      automatic_enabled: true
+      manual_enabled: true
+      bad_channels: []
+      lowcut_hz: 0.5
+      highcut_hz: 45.0
+      filter_order: 4
+      window_sec: 0.5
+      step_sec: 0.1
+      relative_energy_ratio: 8.0
+      absolute_energy_threshold_uv2: 2500.0
+      exclude_windows: 3
+      recovery_windows: 10
+      min_valid_channels: 3
     bands:
       - {key: delta, name: Delta, symbol: "", fmin_hz: 1.0, fmax_hz: 4.0}
       - {key: theta, name: Theta, symbol: "", fmin_hz: 4.0, fmax_hz: 8.0}
