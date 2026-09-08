@@ -49,6 +49,15 @@ python main.py
 - 波形展示：`ui.waveform.*`（只影响展示，不影响采集）
 - 离线数据：`offline.root_dir`、`offline.export.*`
 
+### 3.1 EEG 帧协议（gold 分支）
+
+8 通道 EEG 帧固定为 140 字节：`AA BB` 帧头、1 字节帧序号、120 字节 EEG、
+1 字节 Trigger、10 字节 PPG、2 字节预留、2 字节电量、1 字节 SUM 和 `CC` 帧尾。
+SUM 为除帧头、SUM 自身及帧尾之外所有字节累加后的低 8 位；因此帧序号也参与校验。
+PPG 的首字节 `0x00` 表示数据更新有效，`0x01` 表示未更新，后续三个 24-bit 字段
+依次为绿光、红光、近红外原始值。PPG 不混入 EEG LSL 通道，可从 `/api/status` 的
+`device.ppg` 查看最近一帧数据。
+
 配置文件：主配置 `configs/config.yaml`（提交入库）；本机覆盖 `configs/config.local.yaml`（不提交）。
 
 ***

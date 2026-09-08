@@ -19,7 +19,7 @@ from bleak import BleakClient, BleakScanner
 from configs.config_loader import load_config
 from core.ble.commands import interpret_two_level_cmd
 from core.ble.device_finder import find_device_by_spec
-from core.ble.frame_parser import FrameSpec, FrameStreamDecoder, parse_frame_to_samples
+from core.ble.frame_parser import FrameSpec, FrameStreamDecoder, parse_frame
 from core.ble.impedance_parser import ImpedanceFrameSpec, build_impedance_vector, parse_impedance_frame
 from core.ble.lsl_outlet import LslOutletConfig, LslOutletWriter
 from core.ble.module_naming import BleModuleNameInfo, parse_ble_module_name
@@ -202,6 +202,8 @@ async def _connect_and_stream(
                 bytes_per_sample_per_channel=eeg_proto.frame.bytes_per_sample_per_channel,
                 samples_per_frame=eeg_proto.frame.samples_per_frame,
                 trigger_len_bytes=eeg_proto.frame.trigger_len_bytes,
+                ppg_len_bytes=eeg_proto.frame.ppg_len_bytes,
+                reserved_len_bytes=eeg_proto.frame.reserved_len_bytes,
                 imu_len_bytes=eeg_proto.frame.imu_len_bytes,
                 battery_len_bytes=eeg_proto.frame.battery_len_bytes,
                 tail_len_bytes=eeg_proto.frame.tail_len_bytes,
@@ -281,14 +283,6 @@ async def _connect_and_stream(
         eeg_window_invalid_frames = 0
         eeg_window_lost_by_seq = 0
         eeg_window_dropped_bytes = 0
-
-    def _extract_frame_seq(frame: bytes, spec_: FrameSpec) -> Optional[int]:
-        """
-        提取 EEG 帧序号。
-        """
-        if int(spec_.header_len_bytes) >= 3 and len(frame) >= 3:
-            return int(frame[2]) & 0xFF
-        return None
 
     def _maybe_report_eeg_stats(now_ts: float) -> None:
         """
@@ -526,7 +520,8 @@ async def _connect_and_stream(
         def _push_one_frame(one_frame: bytes) -> None:
             nonlocal frame_counter, eeg_last_seq, eeg_window_valid_frames, eeg_window_lost_by_seq
 
-            seq = _extract_frame_seq(one_frame, spec)
+            decoded_frame = parse_frame(one_frame, spec)
+            seq = decoded_frame.sequence
             if seq is not None and eeg_last_seq is not None:
                 gap = (int(seq) - int(eeg_last_seq) - 1) & 0xFF
                 if gap > 0:
@@ -534,7 +529,9 @@ async def _connect_and_stream(
             if seq is not None:
                 eeg_last_seq = int(seq)
 
-            samples, battery, imu = parse_frame_to_samples(one_frame, spec)
+            samples = decoded_frame.samples
+            battery = decoded_frame.battery_level
+            imu = decoded_frame.imu
             frame_counter += 1
             eeg_window_valid_frames += 1
             if cfg.eeg.lsl.include_trigger_channel:
@@ -552,6 +549,9 @@ async def _connect_and_stream(
                 )
             if imu and frame_counter % 50 == 0:
                 status_queue.put({"type": "imu", "value": imu})
+            if decoded_frame.ppg and (frame_counter == 1 or frame_counter % 50 == 0):
+                # PPG 不进入 EEG LSL 通道，但保留结构化字段供上层诊断/扩展使用。
+                status_queue.put({"type": "ppg", "value": decoded_frame.ppg})
 
         decoded = eeg_decoder.feed(bytes(data))
         eeg_window_invalid_frames += int(decoded.invalid_frames)

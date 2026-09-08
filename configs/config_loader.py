@@ -98,9 +98,14 @@ class FrameProtocolConfig:
     bytes_per_sample_per_channel: int
     samples_per_frame: int
     trigger_len_bytes: int
+    # PPG 与预留段位于 Trigger 之后、battery 之前（CH8 V1.2）。
+    ppg_len_bytes: int
+    reserved_len_bytes: int
+    # 兼容旧协议：当 PPG/预留均为 0 时，可继续解析 IMU 段。
     imu_len_bytes: int
     battery_len_bytes: int
     tail_len_bytes: int
+
 
 
 @dataclass(frozen=True)
@@ -703,12 +708,19 @@ def load_config(config_path: str) -> AppConfig:
     )
 
     def _build_frame_protocol(frame_cfg_raw: Dict[str, Any]) -> FrameProtocolConfig:
+        ppg_len_bytes = int(frame_cfg_raw.get("ppg_len_bytes", 0))
+        reserved_len_bytes = int(frame_cfg_raw.get("reserved_len_bytes", 0))
+        # 新协议显式配置 PPG/预留时默认不再插入旧版 IMU 段；完全旧格式
+        # 的配置仍保持 12-byte IMU 兼容行为。
+        imu_default = 0 if ppg_len_bytes or reserved_len_bytes else 12
         return FrameProtocolConfig(
             header_len_bytes=int(frame_cfg_raw.get("header_len_bytes", 3)),
             bytes_per_sample_per_channel=int(frame_cfg_raw.get("bytes_per_sample_per_channel", 3)),
             samples_per_frame=int(frame_cfg_raw.get("samples_per_frame", 5)),
             trigger_len_bytes=int(frame_cfg_raw.get("trigger_len_bytes", 1)),
-            imu_len_bytes=int(frame_cfg_raw.get("imu_len_bytes", 12)),
+            ppg_len_bytes=ppg_len_bytes,
+            reserved_len_bytes=reserved_len_bytes,
+            imu_len_bytes=int(frame_cfg_raw.get("imu_len_bytes", imu_default)),
             battery_len_bytes=int(frame_cfg_raw.get("battery_len_bytes", 2)),
             tail_len_bytes=int(frame_cfg_raw.get("tail_len_bytes", 2)),
         )

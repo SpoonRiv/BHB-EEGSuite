@@ -1,5 +1,5 @@
 app:
-  ui_version: "3.4.0"
+  ui_version: "3.5.0"
 
 ui:
   waveform:
@@ -169,7 +169,9 @@ eeg:
         bytes_per_sample_per_channel: 3
         samples_per_frame: 5
         trigger_len_bytes: 1
-        imu_len_bytes: 12
+        ppg_len_bytes: 10      # 标志 1 字节 + 绿/红/近红外各 3 字节
+        reserved_len_bytes: 2  # 协议预留字段
+        imu_len_bytes: 0        # CH8 V1.2 不包含 IMU 段
         battery_len_bytes: 2
         tail_len_bytes: 2      # 校验段 1 字节 (SUM) + 帧尾 1 字节 (0xCC)
       conversion:

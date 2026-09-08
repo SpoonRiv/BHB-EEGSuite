@@ -33,6 +33,7 @@ class EEGController:
         self.last_status: Optional[Dict[str, Any]] = None
         self.last_battery: Optional[Dict[str, Any]] = None
         self.last_imu: Optional[Dict[str, Any]] = None
+        self.last_ppg: Optional[Dict[str, Any]] = None
         self.current_mode: str = "idle"
         self.task_running: bool = False
         self.task_mode: str = ""
@@ -62,6 +63,7 @@ class EEGController:
         self.current_mode = "idle"
         self.last_battery = None
         self.last_imu = None
+        self.last_ppg = None
         self.task_running = False
         self.task_mode = ""
 
@@ -137,6 +139,7 @@ class EEGController:
             "task_mode": str(self.task_mode or ""),
             "battery": self.last_battery,
             "imu": self.last_imu,
+            "ppg": self.last_ppg,
             "module": module,
             "capabilities": {"tdcs": tdcs_capable},
         }
@@ -181,6 +184,8 @@ class EEGController:
                     }
                 elif msg_type == "imu" and "value" in msg:
                     self.last_imu = {"value": msg.get("value"), "ts": time.time()}
+                elif msg_type == "ppg" and "value" in msg:
+                    self.last_ppg = {"value": msg.get("value"), "ts": time.time()}
 
                 if msg.get("type") == "connected":
                     logging.info("Bluetooth EEG device connected successfully.")
@@ -283,6 +288,8 @@ class EEGController:
                         }
                     if msg_type == "imu" and "value" in msg:
                         self.last_imu = {"value": msg.get("value"), "ts": time.time()}
+                    if msg_type == "ppg" and "value" in msg:
+                        self.last_ppg = {"value": msg.get("value"), "ts": time.time()}
                     if msg_type == "mode" and "mode" in msg:
                         self.current_mode = str(msg.get("mode"))
                     if msg_type in {"mode_started", "mode_stopped"} and "mode" in msg:

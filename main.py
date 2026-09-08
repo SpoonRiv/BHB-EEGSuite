@@ -1396,6 +1396,33 @@ async def get_config():
         }
         if physical_unit_normalized == "uv":
             conversion_payload["microvolts_per_count"] = 1.0 / effective_divisor
+    protocol_payload = None
+    if active_protocol is not None:
+        frame_cfg = active_protocol.frame
+        protocol_payload = {
+            "header_len_bytes": int(frame_cfg.header_len_bytes),
+            "bytes_per_sample_per_channel": int(frame_cfg.bytes_per_sample_per_channel),
+            "samples_per_frame": int(frame_cfg.samples_per_frame),
+            "trigger_len_bytes": int(frame_cfg.trigger_len_bytes),
+            "ppg_len_bytes": int(getattr(frame_cfg, "ppg_len_bytes", 0)),
+            "reserved_len_bytes": int(getattr(frame_cfg, "reserved_len_bytes", 0)),
+            "imu_len_bytes": int(frame_cfg.imu_len_bytes),
+            "battery_len_bytes": int(frame_cfg.battery_len_bytes),
+            "tail_len_bytes": int(frame_cfg.tail_len_bytes),
+            "frame_len_bytes": int(
+                int(frame_cfg.header_len_bytes)
+                + int(eeg_n_channels)
+                * int(frame_cfg.bytes_per_sample_per_channel)
+                * int(frame_cfg.samples_per_frame)
+                + int(frame_cfg.trigger_len_bytes)
+                + int(getattr(frame_cfg, "ppg_len_bytes", 0))
+                + int(getattr(frame_cfg, "reserved_len_bytes", 0))
+                + int(frame_cfg.imu_len_bytes)
+                + int(frame_cfg.battery_len_bytes)
+                + int(frame_cfg.tail_len_bytes)
+            ),
+            "checksum": "sum(bytes[2:-2]) & 0xff; frame tail 0xcc",
+        }
     return {
         "ui_version": ui_version,
         "ref_channel_name": str(pending_ref or ""),
@@ -1419,6 +1446,7 @@ async def get_config():
         "channel_names": state.config.eeg.channel_names,
         "sampling_rate_hz": state.config.eeg.sampling_rate_hz,
         "eeg_conversion": conversion_payload,
+        "eeg_protocol": protocol_payload,
         "electrode_layout_1020": layout_payload,
         "impedance": {
             "enabled": bool(state.config.impedance.enabled),
