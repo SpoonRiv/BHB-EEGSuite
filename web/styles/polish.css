@@ -333,6 +333,31 @@ body::after {
   color: #17618e;
 }
 
+.brand-edition {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(224, 170, 44, 0.50);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 220, 112, 0.22), rgba(181, 119, 13, 0.16));
+  color: #f4cf70;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 244, 187, 0.18), 0 5px 14px rgba(133, 88, 8, 0.10);
+}
+
+[data-theme="light"] .brand-edition {
+  border-color: rgba(164, 111, 8, 0.34);
+  background: linear-gradient(180deg, rgba(255, 227, 132, 0.46), rgba(238, 190, 63, 0.24));
+  color: #825500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.70), 0 4px 12px rgba(145, 96, 7, 0.10);
+}
+
 .header-context {
   display: flex;
   align-items: center;
@@ -1980,6 +2005,10 @@ input[type="checkbox"] {
   }
 
   .brand-sub {
+    display: none;
+  }
+
+  .brand-edition {
     display: none;
   }
 
