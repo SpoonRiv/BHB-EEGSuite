@@ -26,6 +26,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="styles/app.css" />
     <link rel="stylesheet" href="styles/polish.css" />
+    <link rel="stylesheet" href="styles/modules.css" />
 </head>
 <body>
 <div class="app">
@@ -179,6 +180,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                         <div class="card-title">模式选择</div>
                         <div class="card-sub">请选择本次会话需要进入的工作模式</div>
                     </div>
+                    <button class="btn btn--ghost" id="btn-module-manager" type="button">模块管理</button>
                 </div>
                 <div class="card-body">
                     <div class="mode-grid">
@@ -220,6 +222,11 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                 <div class="mode-desc">用于实时脑电采集与可视化：开始采集后通过 WebSocket 显示多通道波形，并支持 PSD 分析和离线保存，可选择使用带通滤波器。</div>
                             </div>
                         </button>
+                        <div class="mode-carousel">
+                        <button class="mode-carousel__edge mode-carousel__edge--prev" id="mode-scroll-prev" type="button" aria-label="向左查看更多功能" aria-controls="mode-secondary">
+                            <span aria-hidden="true">&lt;</span>
+                        </button>
+                        <div class="mode-carousel__track" id="mode-secondary" role="region" aria-label="更多功能" tabindex="0">
                         <button type="button" class="mode-card mode-card--bottom" id="mode-tdcs" data-tone="mint">
                             <div class="mode-hero-wrap">
                                 <div class="mode-card__hud" aria-hidden="true">
@@ -277,6 +284,27 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                 <div class="mode-desc">运动想象：用于任务范式、训练流程与在线分类/反馈闭环（预留）。</div>
                             </div>
                         </button>
+                        <button type="button" class="mode-card mode-card--bottom mode-card--uninstalled" id="mode-music" data-tone="violet" aria-label="打开文本-音频多模态范式模块管理">
+                            <div class="mode-hero-wrap music-mode-hero">
+                                <div class="mode-card__hud" aria-hidden="true">
+                                    <span class="mode-card__index">06</span>
+                                    <span class="mode-card__state"><i></i><span id="music-module-state">未安装</span></span>
+                                </div>
+                                <div class="music-mode-art" aria-hidden="true"><span>♫</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                            </div>
+                            <div class="mode-meta">
+                                <div class="mode-meta__head">
+                                    <div><div class="mode-meta__eyebrow">TEXT · AUDIO · EEG</div><div class="mode-title">文本-音频多模态范式</div></div>
+                                    <span class="mode-card__arrow" aria-hidden="true">↗</span>
+                                </div>
+                                <div class="mode-desc">选择文本与音频，同步记录脑电和事件，逐项保存实验数据。</div>
+                            </div>
+                        </button>
+                        </div>
+                        <button class="mode-carousel__edge mode-carousel__edge--next" id="mode-scroll-next" type="button" aria-label="向右查看更多功能" aria-controls="mode-secondary">
+                            <span aria-hidden="true">&gt;</span>
+                        </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -689,6 +717,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
     </div>
 </div>
 
+
 <div class="modal-backdrop" id="power-modal" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="power-modal-title" aria-describedby="power-modal-desc">
         <div class="modal-title" id="power-modal-title">确认操作</div>
@@ -710,6 +739,26 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
     </div>
 </div>
 
+<div class="modal-backdrop" id="module-manager-modal" hidden>
+    <div class="modal-card module-manager" role="dialog" aria-modal="true" aria-labelledby="module-manager-title">
+        <div class="module-manager-heading">
+            <div><div class="modal-title" id="module-manager-title">模块管理</div><div class="card-sub">按需安装实验功能</div></div>
+            <button class="btn btn--ghost" id="module-manager-close" type="button">关闭</button>
+        </div>
+        <article class="module-catalog-item">
+            <div class="module-catalog-icon" aria-hidden="true">♫</div>
+            <div class="module-catalog-copy">
+                <strong>文本-音频多模态范式</strong>
+                <p>文本与音频同步呈现、脑电采集、实验事件记录与批量导出。</p>
+                <div class="module-catalog-meta"><span id="module-version">v1.0.0</span><span id="module-installed-state">未安装</span></div>
+            </div>
+            <div class="module-catalog-actions">
+                <button class="btn btn--primary" id="module-install" type="button" disabled>安装</button>
+                <button class="btn btn--danger" id="module-uninstall" type="button" hidden>卸载</button>
+            </div>
+        </article>
+    </div>
+</div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

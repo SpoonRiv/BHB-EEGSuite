@@ -255,6 +255,16 @@ class OfflineService:
             return self._active.session_id if self._active else None
 
     @property
+    def data_root_dir(self) -> str:
+        """Return the absolute root used for offline sessions and exports."""
+        return os.path.abspath(os.path.join(self._project_root_dir, self._root_dir))
+
+    def active_snapshot(self) -> Optional[Dict[str, Any]]:
+        """Return recording counters without loading stale on-disk metadata."""
+        with self._lock:
+            return self._active.to_dict() if self._active else None
+
+    @property
     def filter_defaults(self) -> Dict[str, Any]:
         return {
             "order": int(self._filter_order_default),
@@ -471,12 +481,14 @@ class OfflineService:
         bandpass: Optional[BandpassConfig],
         base_name_filtered: Optional[str] = None,
         block_size_samples: int = 20000,
+        output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         导出会话数据为 CSV 或 EDF。
         """
         info = self.load_session(session_id)
         session_dir = info.session_dir
+        destination_dir = self._resolve_export_dir(output_dir) if output_dir else session_dir
         raw_path = os.path.join(session_dir, "raw_float32.bin")
         if not os.path.exists(raw_path):
             raise FileNotFoundError("raw 数据文件不存在")
@@ -519,7 +531,7 @@ class OfflineService:
             else:
                 fn = stem
             fn = _ensure_ext(fn, target.fmt)
-            out_path = os.path.join(session_dir, fn)
+            out_path = os.path.join(destination_dir, fn)
 
             if target.kind == "raw":
                 self._export_one(data=data, info=info, out_path=out_path, fmt=target.fmt, block_size_samples=block_size_samples)
@@ -544,6 +556,24 @@ class OfflineService:
             )
 
         return {"session_id": info.session_id, "outputs": out_records}
+
+    def _resolve_export_dir(self, output_dir: str) -> str:
+        """Resolve a caller-supplied export directory inside the offline root."""
+        value = str(output_dir or "").strip()
+        if not value:
+            raise ValueError("output_dir 不能为空")
+        root = os.path.realpath(self.data_root_dir)
+        destination = os.path.realpath(os.path.abspath(value))
+        try:
+            inside_root = os.path.commonpath([destination, root]) == root
+        except ValueError:
+            inside_root = False
+        if not inside_root:
+            raise ValueError("导出目录不在离线数据根目录内")
+        os.makedirs(destination, exist_ok=True)
+        if not os.path.isdir(destination):
+            raise FileNotFoundError("导出目录不存在")
+        return destination
 
     def _validate_bandpass(self, cfg: BandpassConfig, sampling_rate_hz: int, need_enabled: bool) -> None:
         if not need_enabled:
@@ -1033,7 +1063,7 @@ class OfflineService:
 
     def _find_session_dir_by_id(self, session_id: str) -> str:
         sid = str(session_id)
-        base = os.path.join(self._project_root_dir, self._root_dir)
+        base = self.data_root_dir
         if not os.path.isdir(base):
             raise FileNotFoundError("离线目录不存在")
         parts = sid.split("_", 1)

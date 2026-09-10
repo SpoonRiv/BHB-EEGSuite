@@ -12,11 +12,14 @@ import { enterEegPage, leaveEegPage } from './eeg.js';
 import { enterImpedancePage, leaveImpedancePage } from './impedance.js';
 import { enterOfflinePage, leaveOfflinePage } from './offline.js';
 import { enterTdcsPage, leaveTdcsPage } from './tdcs.js';
+import { initOptionalModules } from './modules.js';
 import { registerRoute, startRouter, navigate } from './router.js';
 import { setConnBadge } from './ui.js';
 
 let statusTimer = null;
 let navLocked = false;
+let musicLocked = false;
+let serverMusicLocked = false;
 const btnShineTimers = new WeakMap();
 let btnShineTimeoutMs = 1100;
 let lastStatusSnapshot = null;
@@ -132,7 +135,7 @@ function applyConnBadge(deviceStatus) {
 }
 
 function applyNavLock(deviceStatus) {
-  const running = Boolean(deviceStatus && deviceStatus.task_running);
+  const running = Boolean(deviceStatus && deviceStatus.task_running) || musicLocked || serverMusicLocked;
   navLocked = running;
   const navDevice = document.getElementById('nav-device');
   const navMode = document.getElementById('nav-mode');
@@ -173,6 +176,7 @@ async function refreshStatusOnce() {
   try {
     const data = await getStatus();
     lastStatusSnapshot = data;
+    serverMusicLocked = !!data?.music?.active;
     if (data && data.device) {
       applyConnBadge(data.device);
       applyNavLock(data.device);
@@ -311,7 +315,7 @@ function updateHeaderNavActive() {
   const raw = String(window.location.hash || '').trim();
   const hash = raw ? (raw.startsWith('#') ? raw : `#${raw}`) : '#device';
   const deviceActive = hash === '#device';
-  const modeActive = ['#mode', '#eeg', '#offline', '#impedance', '#tdcs'].includes(hash);
+  const modeActive = ['#mode', '#eeg', '#offline', '#impedance', '#tdcs', '#music', '#music-export'].includes(hash);
 
   const applyBtnShine = (btn, type) => {
     if (!btn) return;
@@ -451,7 +455,7 @@ function initRoutes() {
 }
 
 
-function init() {
+async function init() {
   // 窗口控制属于应用级能力，必须先于任何页面模块完成绑定。
   bindMinimizeButton();
   bindPowerButton();
@@ -459,12 +463,17 @@ function init() {
   initModePage();
   initRoutes();
   bindHeaderNav();
+  window.addEventListener('app:music-lock', (event) => {
+    musicLocked = !!event.detail;
+    applyNavLock(lastStatusSnapshot?.device);
+  });
   updateHeaderNavActive();
   window.addEventListener('hashchange', updateHeaderNavActive);
   initButtonShine();
   initThemeToggle();
   initVersionLabel();
   startStatusPolling();
+  await initOptionalModules();
   startRouter();
 }
 

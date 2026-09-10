@@ -29,15 +29,17 @@ async function applyRoute(nextHash) {
   const nh = normalizeHash(nextHash);
   if (nh === currentHash) return;
 
+  const next = routes.get(nh) || routes.get('#device');
+  if (!next) return;
+  if (typeof next.beforeEnter === 'function' && !await next.beforeEnter()) return;
+  if (normalizeHash(window.location.hash) !== nh) return;
+
   const prev = routes.get(currentHash);
   if (prev && typeof prev.onLeave === 'function') {
     try { await prev.onLeave(); } catch (_) {}
   }
 
   currentHash = nh;
-  const next = routes.get(nh) || routes.get('#device');
-  if (!next) return;
-
   setActivePage(next.pageId);
   if (typeof next.onEnter === 'function') {
     try { await next.onEnter(); } catch (error) {

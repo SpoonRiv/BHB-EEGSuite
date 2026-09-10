@@ -180,4 +180,40 @@ export function initModePage() {
 
   bindComingSoon(ssvep, '稳态视觉诱发电位（SSVEP）');
   bindComingSoon(mi, '运动想象（MI）');
+
+  const track = document.getElementById('mode-secondary');
+  const prev = document.getElementById('mode-scroll-prev');
+  const next = document.getElementById('mode-scroll-next');
+  const updateScrollEdges = () => {
+    if (!track) return;
+    track.classList.toggle('mode-carousel__track--compact', track.querySelectorAll('.mode-card').length <= 3);
+    const max = Math.max(0, track.scrollWidth - track.clientWidth);
+    if (prev) prev.classList.toggle('can-scroll', track.scrollLeft > 2);
+    if (next) next.classList.toggle('can-scroll', track.scrollLeft < max - 2);
+  };
+  const scroll = (direction) => {
+    if (!track) return;
+    const card = track.querySelector('.mode-card');
+    const styles = getComputedStyle(track);
+    const gap = Number.parseFloat(styles.columnGap || styles.gap) || 14;
+    const step = card ? card.getBoundingClientRect().width + gap : track.clientWidth * 0.28;
+    track.scrollBy({ left: direction * step, behavior: 'smooth' });
+  };
+  if (prev) prev.onclick = () => scroll(-1);
+  if (next) next.onclick = () => scroll(1);
+  if (track) {
+    window.addEventListener('app:modules-changed', updateScrollEdges);
+    track.addEventListener('scroll', updateScrollEdges, { passive: true });
+    track.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        scroll(event.key === 'ArrowLeft' ? -1 : 1);
+      }
+    });
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(updateScrollEdges);
+      observer.observe(track);
+    }
+    window.requestAnimationFrame(updateScrollEdges);
+  }
 }

@@ -1,0 +1,154 @@
+        <section class="page" id="page-music" data-page-title="文本-音频多模态范式" data-page-desc="文本与音频呈现 · 同步脑电采集 · 逐项保存实验数据">
+            <div class="music-layout">
+                <div class="card music-log-card eeg-debug-card">
+                    <div class="card-header" data-kicker="SYSTEM EVENTS">
+                        <div>
+                            <div class="card-title">调试输出</div>
+                            <div class="card-sub">仅展示结构化调试事件，不展示网络/蓝牙连接信息</div>
+                        </div>
+                        <div class="row">
+                            <input id="music-debug-filter" placeholder="过滤关键字" style="width: 220px;" />
+                            <button class="btn btn--ghost" id="music-debug-clear">清空</button>
+                            <button class="btn btn--ghost" id="music-debug-pause">暂停输出</button>
+                            <button class="btn btn--ghost eeg-focus-toggle" id="music-focus-toggle" type="button" aria-label="隐藏调试" aria-pressed="false" aria-expanded="true" aria-controls="music-debug-body" title="隐藏调试">
+                                <svg class="eeg-focus-icon eeg-focus-icon--hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M3 14.5c2.4-3 5.4-4.5 9-4.5s6.6 1.5 9 4.5M6 17l1.4-2.4M12 18v-3M18 17l-1.4-2.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                <svg class="eeg-focus-icon eeg-focus-icon--show" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/>
+                                </svg>
+                                <span id="music-focus-label">隐藏调试</span>
+                            </button>
+                            <button class="btn btn--primary" id="music-start" disabled>开始实验</button>
+                            <button class="btn btn--danger" id="music-stop" disabled>停止并导出</button>
+                        </div>
+                    </div>
+                    <div class="card-body eeg-debug-body" id="music-debug-body" style="flex: 1; min-height: 0;"><div class="debug-log" id="music-log" role="log" aria-live="polite"></div></div>
+                </div>
+                <div class="card music-console">
+                    <div class="card-header" data-kicker="TEXT-AUDIO MULTIMODAL CONSOLE">
+                        <div><div class="card-title">文本-音频多模态范式</div><div class="card-sub">选择文本与音频，完成一次多模态脑电实验</div></div>
+                    </div>
+                    <div class="card-body music-console-body">
+                        <div class="music-columns">
+                            <div class="tdcs-subcard music-library-panel">
+                                <div class="music-section-head"><div><div class="tdcs-section-title">实验曲库</div><span id="music-selection" class="music-muted">已选 0 首</span></div>
+                                    <div class="row"><button class="btn btn--ghost" id="music-all">全选</button><button class="btn btn--ghost" id="music-none">全不选</button><button class="btn btn--ghost" id="music-refresh">刷新</button></div>
+                                </div>
+                                <div class="music-song-grid" id="music-songs"></div>
+                            </div>
+                            <div class="music-controls">
+                                <div class="tdcs-subcard">
+                                    <div class="tdcs-section-title">实验设置</div>
+                                    <label class="music-field" for="music-subject">受试者编号（选填）<input id="music-subject" maxlength="80" placeholder="例如 P001" autocomplete="off" /></label>
+                                    <label class="music-field" for="music-volume"><span>播放音量 <output id="music-volume-value">60%</output></span><input id="music-volume" type="range" min="0" max="100" value="60" /></label>
+                                    <label class="music-check"><input id="music-fullscreen" type="checkbox" checked />全屏呈现歌词</label>
+                                    <p class="music-muted">每首歌前准备 3 秒，按曲库顺序播放。按 Esc 或点击停止可中止并保存。</p>
+                                </div>
+                                <div class="tdcs-subcard">
+                                    <div class="tdcs-section-title">运行监测</div>
+                                    <div class="music-metrics"><div><span>实验进度</span><strong id="music-progress">0 / 0</strong></div><div><span>采集样本</span><strong id="music-samples">0</strong></div><div><span>实际接收速率</span><strong id="music-rate">-- Hz</strong></div><div><span>当前时长</span><strong id="music-elapsed">00:00</strong></div></div>
+                                    <div class="music-muted" id="music-now">等待开始</div>
+                                    <div class="music-saved-summary"><span id="music-saved-count">已保存 0 首</span><button class="btn btn--ghost" id="music-export" disabled>查看并导出数据</button></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="page" id="page-music-export" data-page-title="文本-音频数据导出" data-page-desc="查看文本-音频多模态范式会话并导出 CSV 或 EDF 文件">
+            <div class="card offline-card music-export-card">
+                <div class="card-header" data-kicker="TEXT-AUDIO DATA ARCHIVE">
+                    <div>
+                        <div class="card-title">文本-音频数据导出</div>
+                        <div class="card-sub">结束实验后，所有已完成项目默认一次性导出到同一目录</div>
+                    </div>
+                    <div class="row">
+                        <button class="btn btn--ghost" id="music-export-back" type="button">返回文本-音频范式</button>
+                        <button class="btn btn--ghost" id="music-export-mode" type="button">返回模式</button>
+                        <button class="btn btn--primary" id="music-export-all-files" type="button">导出文件</button>
+                    </div>
+                </div>
+                <div class="card-body offline-card-body">
+                    <div class="stack offline-page-stack">
+                        <div class="offline-layout-grid music-export-layout">
+                            <div class="offline-session-panel">
+                                <div class="offline-section-head">
+                                    <div class="offline-section-title">会话概览</div>
+                                    <div class="offline-section-sub">全部已完成文本-音频项目将按实验顺序写入 1-10 编号文件夹</div>
+                                </div>
+                                <div class="offline-session-grid">
+                                    <div class="field">
+                                        <div class="label">导出状态</div>
+                                        <div class="status-box error" id="music-export-status" role="status" aria-live="polite">状态：正在读取已保存会话…</div>
+                                    </div>
+                                    <div class="field">
+                                        <div class="label">共同导出目录</div>
+                                        <div class="status-box offline-session-dir-control">
+                                            <span id="music-export-dir">--</span>
+                                            <button class="btn btn--ghost" id="music-export-open-folder" type="button" style="display: none;">在文件夹中打开</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="offline-metrics-grid" aria-label="文本-音频导出概况">
+                                    <div class="offline-metric">
+                                        <span class="offline-metric__label">已完成项目</span>
+                                        <strong class="offline-metric__value" id="music-export-count">--</strong>
+                                    </div>
+                                    <div class="offline-metric">
+                                        <span class="offline-metric__label">编号文件夹</span>
+                                        <strong class="offline-metric__value" id="music-export-folders">10</strong>
+                                    </div>
+                                    <div class="offline-metric">
+                                        <span class="offline-metric__label">导出文件</span>
+                                        <strong class="offline-metric__value" id="music-export-files">--</strong>
+                                    </div>
+                                    <div class="offline-metric">
+                                        <span class="offline-metric__label">文件格式</span>
+                                        <strong class="offline-metric__value" id="music-export-format">CSV</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="offline-panel offline-panel--raw music-export-panel">
+                                <div class="offline-section-head" data-step="01">
+                                    <div class="offline-section-title">全部项目</div>
+                                    <div class="offline-section-sub">按实验顺序确认每个项目对应的会话和编号</div>
+                                </div>
+                                <div class="music-export-list" id="music-export-list"></div>
+                            </div>
+
+                            <div class="offline-panel music-export-panel">
+                                <div class="offline-section-head" data-step="02">
+                                    <div class="offline-section-title">导出内容</div>
+                                    <div class="offline-section-sub">一次操作生成全部已完成项目的原始数据文件</div>
+                                </div>
+                                <div class="stack offline-form-stack music-export-summary">
+                                    <div class="field">
+                                        <div class="label">文件格式</div>
+                                        <div class="offline-format-grid">
+                                            <label class="offline-format-option">
+                                                <input id="music-export-csv" type="checkbox" checked />
+                                                <span class="offline-format-copy"><strong>CSV</strong><small>适合脚本与表格分析</small></span>
+                                            </label>
+                                            <label class="offline-format-option">
+                                                <input id="music-export-edf" type="checkbox" />
+                                                <span class="offline-format-copy"><strong>EDF</strong><small>适合脑电分析软件</small></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="offline-filter-idle music-export-empty-note" id="music-export-note">完成项目会自动全部纳入导出，无需逐项选择。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <div id="music-stage" class="music-stage" role="dialog" aria-modal="true" aria-labelledby="music-stage-song" hidden>
+            <div class="music-stage-bar"><span id="music-stage-position">文本-音频多模态范式</span><button class="btn btn--danger" id="music-stage-stop">停止并导出 · Esc</button></div>
+            <div class="music-stage-content"><div id="music-stage-song" class="music-stage-song"></div><div id="music-countdown" aria-live="polite"></div><div id="music-lyrics" class="music-lyrics"></div></div>
+            <div class="music-stage-footer"><span id="music-stage-state">请保持静止，准备聆听</span><span id="music-stage-time">00:00 / 00:00</span></div>
+        </div>

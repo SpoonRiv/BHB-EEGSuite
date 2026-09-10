@@ -33,6 +33,10 @@ export async function getStatus() {
   return fetchJson('/api/status');
 }
 
+export async function getModules() { return fetchJson('/api/modules'); }
+export async function installModule(moduleId) { return fetchJson(`/api/modules/${encodeURIComponent(moduleId)}/install`, { method: 'POST' }); }
+export async function uninstallModule(moduleId) { return fetchJson(`/api/modules/${encodeURIComponent(moduleId)}/uninstall`, { method: 'POST' }); }
+
 export async function bleDevices(timeoutSec = 3.0, whitelistOnly = true) {
   const qs = new URLSearchParams({
     timeout_sec: String(timeoutSec),

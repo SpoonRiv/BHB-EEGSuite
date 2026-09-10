@@ -70,5 +70,8 @@ tests/
 # Local runtime overrides (do not commit)
 configs/config.local.yaml
 
+# Optional modules are installed locally, never enabled by a fresh checkout.
+module_data/
+
 # VSCodeCounter (do not commit)
 .VSCodeCounter/

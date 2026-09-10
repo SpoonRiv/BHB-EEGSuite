@@ -39,6 +39,7 @@ from core.signal.notch_filter import NotchFilter, NotchFilterConfig
 from core.signal.bandpass_filter import BandpassFilter, BandpassFilterConfig
 from core.signal.psd_worker import PsdBandDefinition, PsdWorker, PsdWorkerConfig
 from core.trigger.trigger_service import TriggerService, TriggerServiceConfig
+from core.modules import OptionalModuleManager, create_module_router
 from ws_hub_eeg import EegWsHub, EegWsHubConfig
 from ws_hub_impedance import ImpedanceWsHub, ImpedanceWsHubConfig
 from ws_hub_psd import PsdWsHub, PsdWsHubConfig
@@ -982,6 +983,47 @@ class AppState:
 state = AppState()
 
 
+async def _music_acquire():
+    """Start the existing EEG/LSL path while MusicService owns per-song sessions."""
+    if bool(getattr(state.streamer, "is_streaming", False)):
+        return {"status": "error", "message": "EEG 正在采集中，请先停止采集"}
+    if bool(getattr(state.config, "trigger", None) and state.config.trigger.enabled):
+        try:
+            await asyncio.to_thread(state.trigger.start_server)
+        except Exception as exc:
+            return {"status": "error", "message": f"trigger 服务端启动失败：{exc}"}
+    state.controller.select_mode("eeg")
+    if not state.controller.start_mode("eeg"):
+        return {"status": "error", "message": "EEG 启动失败"}
+    try:
+        state.notch.reset()
+        state.bandpass.reset()
+    except Exception:
+        pass
+    state.streamer.start()
+    state.eeg_ws_hub.start()
+    await state.ensure_debug_forwarding()
+    return {"status": "success"}
+
+
+async def _music_release():
+    state.eeg_ws_hub.stop(clear_pending=True)
+    state.stop_psd()
+    state.streamer.stop()
+    state.controller.send_trigger_command("end", "music")
+    stopped = state.controller.stop_mode("eeg")
+    # Final fallback also closes an active raw writer after a disk/export error.
+    await asyncio.to_thread(state.offline.stop_session)
+    try:
+        state.trigger.stop_server()
+    except Exception:
+        pass
+    return {"status": "success" if stopped else "error", "message": "EEG 停止指令投递失败，请检查设备连接" if not stopped else "EEG 已停止"}
+
+
+music_service = OptionalModuleManager(os.path.dirname(__file__), state, _music_acquire, _music_release)
+
+
 def shutdown_runtime() -> None:
     """
     关闭数据流、后台服务和采集进程。
@@ -1211,6 +1253,7 @@ async def lifespan(app: FastAPI):
     FastAPI 生命周期管理：启动时注册数据流回调，关闭时停止设备。
     """
     _install_websocket_lifecycle_log_filter()
+    music_service.restore()
     logging.info("Application starting: registering callbacks...")
     state.streamer.add_callback(state.on_lsl_chunk)
     state.imp_streamer.add_callback(state.on_imp_lsl_chunk)
@@ -1218,6 +1261,7 @@ async def lifespan(app: FastAPI):
         await state.ensure_debug_forwarding()
     yield
     logging.info("Application shutting down: cleaning up resources...")
+    await music_service.stop(reason="shutdown")
     state.eeg_ws_hub.stop(clear_pending=True)
     state.streamer.stop()
     state.imp_ws_hub.stop(clear_pending=True)
@@ -1241,6 +1285,8 @@ app.add_middleware(
 
 # 挂载前端静态资源
 app.mount("/web", NoCacheStaticFiles(directory="web"), name="web")
+app.include_router(create_module_router(music_service))
+app.mount("/api/music", music_service, name="music-module")
 
 
 @app.get("/")
@@ -1251,6 +1297,8 @@ async def root():
 @app.get("/api/start")
 async def start_eeg():
     """启动蓝牙设备与 LSL 数据流"""
+    if music_service.active:
+        raise HTTPException(409, "文本-音频多模态实验运行中，请先停止实验")
     if state.config.debug.ui_enabled:
         state.debug_bus.publish(tag="UI", message="点击开始采集", data={})
     if bool(getattr(state.config, "trigger", None) and state.config.trigger.enabled):
@@ -1868,9 +1916,12 @@ async def get_status():
     获取采集状态（用于前端连接指示与设备名展示）。
     """
     device_status = state.controller.get_status()
+    if music_service.active and (not device_status.get("running") or device_status.get("last", {}).get("type") in {"disconnected", "error", "stopped"}):
+        await music_service.stop(reason="device_lost")
     device_status = await state.reconcile_runtime_with_device(device_status)
     return {
         "device": device_status,
+        "music": music_service.snapshot(),
         "lsl_streaming": bool(getattr(state.streamer, "is_streaming", False)),
         "lsl": state.streamer.get_status() if hasattr(state.streamer, "get_status") else None,
         "impedance_lsl_streaming": bool(getattr(state.imp_streamer, "is_streaming", False)),
@@ -1880,6 +1931,7 @@ async def get_status():
 @app.get("/api/stop")
 async def stop_eeg():
     """停止蓝牙设备与 LSL 数据流"""
+    await music_service.stop(reason="stopped")
     if state.config.debug.ui_enabled:
         state.debug_bus.publish(tag="UI", message="点击停止采集", data={})
     state.eeg_ws_hub.stop(clear_pending=False)
@@ -1946,6 +1998,8 @@ async def ble_connect(req: BleConnectRequest):
     对 MSM008Sxx/MSM016Sxx，必须先把设备通道能力同步到主进程配置，
     再启动采集子进程，避免父子进程分别按 16/8 通道解析同一数据流。
     """
+    if music_service.active:
+        raise HTTPException(status_code=409, detail="文本-音频多模态实验运行中，请先停止实验")
     current_status = state.controller.get_status()
     await state.reconcile_runtime_with_device(current_status)
 
@@ -2013,6 +2067,7 @@ async def ble_disconnect():
     """
     断开 BLE 连接并停止相关后台任务。
     """
+    await music_service.stop(reason="device_lost")
     state.eeg_ws_hub.stop(clear_pending=True)
     state.streamer.stop()
     state.imp_ws_hub.stop(clear_pending=True)
@@ -2036,6 +2091,7 @@ async def app_shutdown():
     执行应用关机：断开蓝牙、停止后台任务，并在响应后退出当前服务进程。
     """
     try:
+        await music_service.stop(reason="shutdown")
         await asyncio.to_thread(shutdown_runtime)
         if state.config.debug.ui_enabled:
             try:
@@ -2101,6 +2157,8 @@ async def send_two_level_command(req: TwoLevelCommandRequest):
     """
     下发两级控制指令（一级 + 二级 + 附加数据）。
     """
+    if music_service.active:
+        raise HTTPException(409, "文本-音频多模态实验运行中，请先停止实验")
     l1 = int(req.l1) & 0xFF
     l2 = int(req.l2) & 0xFF
     data: List[int] = []
@@ -2133,6 +2191,8 @@ async def select_mode(req: ModeRequest):
     """
     选择模式（不自动开始）。
     """
+    if music_service.active:
+        raise HTTPException(409, "文本-音频多模态实验运行中，请先停止实验")
     ok = state.controller.select_mode(req.mode)
     if not ok:
         return {"status": "error", "message": "设备未连接或模式选择失败", "device": state.controller.get_status()}
@@ -2144,6 +2204,8 @@ async def start_mode(req: ModeRequest):
     """
     启动模式（向设备下发 start 指令）。EEG 模式会同时启动 LSL->WS 推送。
     """
+    if music_service.active:
+        raise HTTPException(409, "文本-音频多模态实验运行中，请先停止实验")
     if req.mode == "eeg":
         if bool(getattr(state.streamer, "is_streaming", False)):
             return {"status": "error", "message": "EEG 正在采集中，请先停止采集", "device": state.controller.get_status()}
@@ -2191,6 +2253,8 @@ async def stop_mode(req: ModeRequest):
     """
     停止模式（向设备下发 stop 指令）。EEG 模式会同时停止 LSL->WS 推送。
     """
+    if music_service.active:
+        raise HTTPException(409, "请在文本-音频多模态范式页面停止实验，以保存当前项目数据")
     if req.mode == "eeg":
         state.eeg_ws_hub.stop(clear_pending=True)
         state.stop_psd()
