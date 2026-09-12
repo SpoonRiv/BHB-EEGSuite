@@ -3561,19 +3561,6 @@ select option {
   flex-shrink: 0;
 }
 
-.eeg-analysis-mode-card {
-  margin-bottom: 10px;
-  padding: 9px 10px;
-  border: 1px solid rgba(var(--accent-rgb), 0.22);
-  border-radius: 10px;
-  background: rgba(var(--accent-rgb), 0.07);
-}
-
-.eeg-analysis-mode-card .eeg-settings-section-title {
-  margin-top: 0;
-  color: var(--text);
-}
-
 .eeg-analysis-mode-row {
   margin-bottom: 0;
 }

@@ -18,8 +18,12 @@ import { createSelectableTopomap } from './impedance_topomap.js';
 const PSD_DISPLAY_MIN_HZ = 1;
 const PSD_DISPLAY_MAX_HZ = 45;
 const VARIANCE_TREND_WINDOW_MS = 30000;
-const VARIANCE_DISPLAY_SCALE = 10000;
-const VARIANCE_DISPLAY_UNIT = '×10⁴ μV²';
+const VARIANCE_YAXIS_DYNAMIC_KEY = 'bhb_eeg_variance_yaxis_dynamic';
+const VARIANCE_YAXIS_FIXED_MAX_KEY = 'bhb_eeg_variance_yaxis_fixed_max_raw';
+const VARIANCE_YAXIS_EXPONENT_MIN = -12;
+const VARIANCE_YAXIS_EXPONENT_MAX = 12;
+const VARIANCE_YAXIS_EXPONENT_STEP = 0.1;
+const VARIANCE_YAXIS_FIXED_MAX_DEFAULT = 1e5;
 
 const MAP_HINT_DEFAULT = '点选电极分析单一通道，点选2个进入对比视图。';
 const MAP_HINT_FULL_CHANNEL = '全通道分析已开启，图表显示全通道平均结果。';
@@ -69,6 +73,12 @@ function formatPower(value) {
   return n.toFixed(3);
 }
 
+function formatScientific(value, precision = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '--';
+  return n.toExponential(precision);
+}
+
 function hexToRgba(hex, alpha) {
   const raw = String(hex || '').replace('#', '');
   if (!/^[0-9a-fA-F]{6}$/.test(raw)) return `rgba(56, 189, 248, ${alpha})`;
@@ -91,6 +101,8 @@ export class EegPsdView {
     // Keep the original default: the frequency view starts with all-channel analysis.
     this.scopeMode = 'average';
     this.bandMetricMode = 'energy';
+    this.varianceYAxisDynamicEnabled = true;
+    this.varianceYAxisFixedMax = VARIANCE_YAXIS_FIXED_MAX_DEFAULT;
     this.activeChannels = this.channelNames.length ? [this.channelNames[0]] : [];
     this.psdWs = null;
     this.varianceWs = null;
@@ -124,6 +136,9 @@ export class EegPsdView {
     this.elSettingsPopover = null;
     this.elLegend = null;
     this.elAnalysisModeSection = null;
+    this.elVarianceYAxisDynamic = null;
+    this.elVarianceYAxisRange = null;
+    this.elVarianceYAxisPill = null;
     this.elTopomapSection = null;
     this.elQualitySettings = null;
     this.elQualityAutomatic = null;
@@ -151,6 +166,20 @@ export class EegPsdView {
     this.triggerPending = false;
     this.electrodePositions = electrodePositions && typeof electrodePositions === 'object' ? electrodePositions : null;
     this.electrodeAliases = electrodeAliases && typeof electrodeAliases === 'object' ? electrodeAliases : null;
+    try {
+      const storedDynamic = localStorage.getItem(VARIANCE_YAXIS_DYNAMIC_KEY);
+      const storedMax = localStorage.getItem(VARIANCE_YAXIS_FIXED_MAX_KEY);
+      if (storedDynamic !== null) this.varianceYAxisDynamicEnabled = storedDynamic === '1';
+      if (storedMax !== null) {
+        const value = Number(storedMax);
+        if (Number.isFinite(value) && value > 0) {
+          this.varianceYAxisFixedMax = Math.min(
+            10 ** VARIANCE_YAXIS_EXPONENT_MAX,
+            Math.max(10 ** VARIANCE_YAXIS_EXPONENT_MIN, value),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   mount({ controlsId, timeViewId, psdViewId, chartId, bandChartId, varianceChartId, toolbarId, scopeControlsId, yAxisControlsId, onModeChange }) {
@@ -395,13 +424,6 @@ export class EegPsdView {
     const body = document.createElement('div');
     body.className = 'eeg-settings-popover-body';
 
-    const analysis = document.createElement('section');
-    analysis.className = 'eeg-settings-section eeg-analysis-mode-card';
-    const analysisTitle = document.createElement('div');
-    analysisTitle.className = 'eeg-settings-section-title';
-    analysisTitle.textContent = '分析模式';
-    analysis.appendChild(analysisTitle);
-
     const analysisRow = document.createElement('div');
     analysisRow.className = 'eeg-settings-row eeg-analysis-mode-row';
     const analysisLabel = document.createElement('span');
@@ -420,8 +442,79 @@ export class EegPsdView {
     analysisSlider.className = 'ios-slider';
     analysisSwitch.append(analysisInput, analysisSlider);
     analysisRow.append(analysisLabel, analysisSwitch);
-    analysis.appendChild(analysisRow);
-    body.appendChild(analysis);
+    body.appendChild(analysisRow);
+
+    const varianceSection = document.createElement('div');
+    varianceSection.className = 'eeg-settings-section eeg-variance-yaxis-section';
+    const varianceTitle = document.createElement('div');
+    varianceTitle.className = 'eeg-settings-section-title';
+    varianceTitle.textContent = '方差趋势 Y 轴';
+    varianceSection.appendChild(varianceTitle);
+
+    const varianceDynamicRow = document.createElement('div');
+    varianceDynamicRow.className = 'eeg-settings-row';
+    const varianceDynamicLabel = document.createElement('span');
+    varianceDynamicLabel.className = 'eeg-settings-label';
+    varianceDynamicLabel.textContent = '自动量程';
+    const varianceDynamicSwitch = document.createElement('label');
+    varianceDynamicSwitch.className = 'ios-switch';
+    varianceDynamicSwitch.title = '根据最近方差趋势自动调整 Y 轴上限';
+    const varianceDynamicInput = document.createElement('input');
+    varianceDynamicInput.type = 'checkbox';
+    varianceDynamicInput.checked = this.varianceYAxisDynamicEnabled;
+    varianceDynamicInput.setAttribute('role', 'switch');
+    varianceDynamicInput.setAttribute('aria-label', '方差趋势自动量程');
+    const varianceDynamicSlider = document.createElement('span');
+    varianceDynamicSlider.className = 'ios-slider';
+    varianceDynamicSwitch.append(varianceDynamicInput, varianceDynamicSlider);
+    varianceDynamicRow.append(varianceDynamicLabel, varianceDynamicSwitch);
+    varianceSection.appendChild(varianceDynamicRow);
+
+    const varianceRangeRow = document.createElement('div');
+    varianceRangeRow.className = 'eeg-settings-row';
+    const varianceRangeLabel = document.createElement('span');
+    varianceRangeLabel.className = 'eeg-settings-label';
+    varianceRangeLabel.textContent = '固定上限';
+    const varianceRangeInput = document.createElement('input');
+    varianceRangeInput.type = 'range';
+    varianceRangeInput.min = String(VARIANCE_YAXIS_EXPONENT_MIN);
+    varianceRangeInput.max = String(VARIANCE_YAXIS_EXPONENT_MAX);
+    varianceRangeInput.step = String(VARIANCE_YAXIS_EXPONENT_STEP);
+    varianceRangeInput.value = String(Math.log10(this.varianceYAxisFixedMax));
+    varianceRangeInput.disabled = this.varianceYAxisDynamicEnabled;
+    varianceRangeInput.setAttribute('aria-label', '方差趋势固定 Y 轴上限');
+    const variancePill = document.createElement('span');
+    variancePill.className = 'eeg-settings-pill';
+    variancePill.textContent = formatScientific(this.varianceYAxisFixedMax);
+    if (this.varianceYAxisDynamicEnabled) variancePill.classList.add('is-dim');
+    varianceRangeRow.append(varianceRangeLabel, varianceRangeInput, variancePill);
+    varianceSection.appendChild(varianceRangeRow);
+    body.appendChild(varianceSection);
+
+    const applyVarianceYAxisUiState = () => {
+      varianceRangeInput.disabled = this.varianceYAxisDynamicEnabled;
+      variancePill.classList.toggle('is-dim', this.varianceYAxisDynamicEnabled);
+      variancePill.textContent = formatScientific(this.varianceYAxisFixedMax);
+    };
+    varianceDynamicInput.onchange = () => {
+      this.varianceYAxisDynamicEnabled = varianceDynamicInput.checked;
+      try { localStorage.setItem(VARIANCE_YAXIS_DYNAMIC_KEY, this.varianceYAxisDynamicEnabled ? '1' : '0'); } catch (_) {}
+      applyVarianceYAxisUiState();
+      this._renderIfReady();
+    };
+    varianceRangeInput.oninput = () => {
+      const exponent = Number(varianceRangeInput.value);
+      if (!Number.isFinite(exponent)) return;
+      const clampedExponent = Math.min(
+        VARIANCE_YAXIS_EXPONENT_MAX,
+        Math.max(VARIANCE_YAXIS_EXPONENT_MIN, exponent),
+      );
+      this.varianceYAxisFixedMax = 10 ** clampedExponent;
+      varianceRangeInput.value = String(clampedExponent);
+      try { localStorage.setItem(VARIANCE_YAXIS_FIXED_MAX_KEY, String(this.varianceYAxisFixedMax)); } catch (_) {}
+      applyVarianceYAxisUiState();
+      if (!this.varianceYAxisDynamicEnabled) this._renderIfReady();
+    };
 
     const sec2 = document.createElement('div');
     sec2.className = 'eeg-settings-section eeg-settings-topomap-section';
@@ -498,7 +591,10 @@ export class EegPsdView {
     this.settingsToggleBtn = toggleBtn;
     this.elSettingsPopover = popover;
     this.elMapHint = mapHint;
-    this.elAnalysisModeSection = analysis;
+    this.elAnalysisModeSection = analysisRow;
+    this.elVarianceYAxisDynamic = varianceDynamicInput;
+    this.elVarianceYAxisRange = varianceRangeInput;
+    this.elVarianceYAxisPill = variancePill;
     this.elTopomapSection = sec2;
     this.scopeToggle = analysisInput;
     this.elQualitySettings = quality;
@@ -871,15 +967,20 @@ export class EegPsdView {
     const sources = this._varianceSources();
     const latestTs = this.varianceHistory[this.varianceHistory.length - 1].tsMs;
     const series = [];
+    let observedMax = 0;
     sources.forEach((source, sourceIndex) => {
       bands.forEach((band, bandIndex) => {
         const data = this.varianceHistory.map((entry) => {
           const values = source.key === 'average' ? entry.average : entry.channels[source.key];
           const value = Array.isArray(values) ? Number(values[bandIndex]) : NaN;
           return Number.isFinite(value)
-            ? [(entry.tsMs - latestTs) / 1000, value / VARIANCE_DISPLAY_SCALE]
+            ? [(entry.tsMs - latestTs) / 1000, value]
             : null;
         }).filter(Boolean);
+        for (const point of data) {
+          const value = Number(point[1]);
+          if (Number.isFinite(value)) observedMax = Math.max(observedMax, value);
+        }
         series.push({
           name: sources.length > 1 ? `${source.name} · ${band.name}` : band.name,
           type: 'line',
@@ -896,6 +997,12 @@ export class EegPsdView {
         });
       });
     });
+    const dynamicMax = observedMax > 0
+      ? observedMax * 1.25
+      : 1;
+    const yAxisMax = this.varianceYAxisDynamicEnabled
+      ? dynamicMax
+      : Math.max(10 ** VARIANCE_YAXIS_EXPONENT_MIN, Number(this.varianceYAxisFixedMax) || VARIANCE_YAXIS_FIXED_MAX_DEFAULT);
     this.varianceChart.setOption({
       backgroundColor: 'transparent',
       grid: { top: 18, right: 18, bottom: 42, left: 58, containLabel: false },
@@ -910,7 +1017,7 @@ export class EegPsdView {
           if (!items.length) return '';
           const seconds = Number(items[0].value[0]);
           const heading = seconds >= -0.05 ? '当前' : `${Math.abs(seconds).toFixed(1)} 秒前`;
-          const rows = items.map((item) => `${item.marker || ''}${escapeHtml(item.seriesName)}：<strong>${Number(item.value[1]).toFixed(2)} ${VARIANCE_DISPLAY_UNIT}</strong>`).join('<br>');
+          const rows = items.map((item) => `${item.marker || ''}${escapeHtml(item.seriesName)}：<strong>${formatScientific(item.value[1])}</strong>`).join('<br>');
           return `<div class="band-tooltip-title">${heading}</div>${rows}`;
         },
       },
@@ -926,14 +1033,11 @@ export class EegPsdView {
       yAxis: {
         type: 'value',
         min: 0,
-        scale: true,
-        name: `方差（${VARIANCE_DISPLAY_UNIT}）`,
-        nameLocation: 'middle',
-        nameGap: 44,
-        nameTextStyle: { color: colors.axis, fontWeight: 750 },
+        max: yAxisMax,
+        scale: false,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: colors.axis },
+        axisLabel: { color: colors.axis, formatter: (value) => formatScientific(value, 1) },
         splitLine: { lineStyle: { color: colors.split, type: 'dashed' } },
       },
       series,
@@ -1269,7 +1373,7 @@ export class EegPsdView {
     const colors = this._chartTheme();
     const isDe = this.bandMetricMode === 'de';
     const isVariance = this.bandMetricMode === 'variance';
-    const metricUnit = isDe ? 'nat' : (isVariance ? VARIANCE_DISPLAY_UNIT : '%');
+    const metricUnit = isDe ? 'nat' : '%';
     const metricOf = (entry) => {
       if (isDe) return entry.bandPower.differentialEntropy;
       if (isVariance) return entry.bandPower.causalVariance;
@@ -1292,9 +1396,7 @@ export class EegPsdView {
     }
 
     // 合并所有数据源（单通道或双通道）的极值计算 y 轴范围
-    const allValues = rows.flatMap((entry) => metricOf(entry).map((value) => (
-      isVariance ? Number(value) / VARIANCE_DISPLAY_SCALE : Number(value)
-    )));
+    const allValues = rows.flatMap((entry) => metricOf(entry).map(Number));
     let yMin = 0;
     let yMax = 100;
     if (isDe) {
@@ -1317,12 +1419,13 @@ export class EegPsdView {
     const categories = bands.map((band) => `${band.name}`);
     const labelFormatter = (item) => {
       if (isDe) return Number(item.value).toFixed(2);
-      if (isVariance) return Number(item.value).toFixed(2);
+      if (isVariance) return formatScientific(item.value);
       return `${Number(item.value).toFixed(1)}%`;
     };
 
     const buildBarData = (entry, seriesColor) => bands.map((band, index) => {
-      const value = Number(Number(metricOf(entry)[index]).toFixed(3));
+      const rawValue = Number(metricOf(entry)[index]);
+      const value = isVariance ? rawValue : Number(rawValue.toFixed(3));
       return {
         value,
         itemStyle: {
@@ -1386,7 +1489,7 @@ export class EegPsdView {
             const metric = isDe
               ? `${Number(item.value).toFixed(3)} ${metricUnit}`
               : (isVariance
-                ? `${Number(item.value).toFixed(2)} ${metricUnit}`
+                ? formatScientific(item.value)
                 : `${Number(item.value).toFixed(1)}${metricUnit}`);
             return `<div>${item.marker || ''}${escapeHtml(item.seriesName)}：<strong>${metric}</strong>${power}</div>`;
           }).join('');
@@ -1405,7 +1508,7 @@ export class EegPsdView {
           const metric = isDe
             ? `<strong>DE ${Number(item.value).toFixed(3)} ${metricUnit}</strong>`
             : (isVariance
-              ? `<strong>Var ${Number(item.value).toFixed(2)} ${metricUnit}</strong>`
+              ? `<strong>Var ${formatScientific(item.value)}</strong>`
               : `<strong>${Number(item.value).toFixed(1)}${metricUnit}</strong>`);
           return `<div class="band-tooltip-title">${escapeHtml(rows[0].name)} · ${escapeHtml(band.name)}</div><div>${formatHz(band.fmin_hz)}–${formatHz(band.fmax_hz)} Hz</div>${power}${metric}`;
         },
@@ -1450,7 +1553,7 @@ export class EegPsdView {
         max: yMax,
         name: isDe
           ? '微分熵（nat）'
-          : (isVariance ? `方差（${VARIANCE_DISPLAY_UNIT}）` : '相对功率（%）'),
+          : (isVariance ? '' : '相对功率（%）'),
         nameLocation: 'middle',
         nameGap: 38,
         nameTextStyle: { color: colors.axis, fontWeight: 750 },
@@ -1458,7 +1561,7 @@ export class EegPsdView {
         axisTick: { show: false },
         axisLabel: {
           color: colors.axis,
-          formatter: isDe || isVariance ? '{value}' : '{value}%',
+          formatter: isVariance ? (value) => formatScientific(value, 1) : (isDe ? '{value}' : '{value}%'),
         },
         splitLine: { lineStyle: { color: colors.split, type: 'dashed' } },
       },
