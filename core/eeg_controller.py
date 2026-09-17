@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from configs.config_loader import load_config
 from core.ble.acquisition_process import run_ble_acquisition_process
 from core.ble.module_naming import parse_ble_module_name
+from core.ppg_stream import PpgBuffer
 
 
 class EEGController:
@@ -34,6 +35,7 @@ class EEGController:
         self.last_battery: Optional[Dict[str, Any]] = None
         self.last_imu: Optional[Dict[str, Any]] = None
         self.last_ppg: Optional[Dict[str, Any]] = None
+        self.ppg_buffer = PpgBuffer()
         self.current_mode: str = "idle"
         self.task_running: bool = False
         self.task_mode: str = ""
@@ -64,6 +66,7 @@ class EEGController:
         self.last_battery = None
         self.last_imu = None
         self.last_ppg = None
+        self.ppg_buffer.clear()
         self.task_running = False
         self.task_mode = ""
 
@@ -185,7 +188,7 @@ class EEGController:
                 elif msg_type == "imu" and "value" in msg:
                     self.last_imu = {"value": msg.get("value"), "ts": time.time()}
                 elif msg_type == "ppg" and "value" in msg:
-                    self.last_ppg = {"value": msg.get("value"), "ts": time.time()}
+                    self._receive_ppg(msg)
 
                 if msg.get("type") == "connected":
                     logging.info("Bluetooth EEG device connected successfully.")
@@ -265,6 +268,20 @@ class EEGController:
         self.command_queue.put({"type": "send_cmd", "cmd": cmd_bytes})
         return True
 
+    def _receive_ppg(self, msg: Dict[str, Any]) -> None:
+        timestamp = float(msg.get("ts", time.time()))
+        self.last_ppg = {"value": msg.get("value"), "ts": timestamp}
+        self.ppg_buffer.append(msg.get("value"), timestamp)
+
+    def get_ppg_snapshot(self, after_id: int = 0) -> Dict[str, Any]:
+        self._drain_status_queue()
+        self._sync_process_lifecycle()
+        return {
+            "type": "ppg_data",
+            "active": bool(self.task_running and self.task_mode == "eeg"),
+            **self.ppg_buffer.snapshot(after_id),
+        }
+
     def _drain_status_queue(self) -> None:
         """
         无阻塞读取状态队列，并更新本地缓存。
@@ -289,10 +306,12 @@ class EEGController:
                     if msg_type == "imu" and "value" in msg:
                         self.last_imu = {"value": msg.get("value"), "ts": time.time()}
                     if msg_type == "ppg" and "value" in msg:
-                        self.last_ppg = {"value": msg.get("value"), "ts": time.time()}
+                        self._receive_ppg(msg)
                     if msg_type == "mode" and "mode" in msg:
                         self.current_mode = str(msg.get("mode"))
                     if msg_type in {"mode_started", "mode_stopped"} and "mode" in msg:
+                        self.ppg_buffer.clear()
+                        self.last_ppg = None
                         if msg_type == "mode_started":
                             self.current_mode = str(msg.get("mode"))
                             self.task_running = True

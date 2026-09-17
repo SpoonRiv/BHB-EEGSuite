@@ -2416,6 +2416,35 @@ async def websocket_endpoint(websocket: WebSocket):
         _log_websocket_closed(websocket, disconnect)
 
 
+@app.websocket("/ws/ppg")
+async def ppg_ws(websocket: WebSocket):
+    """Send all new PPG samples, independently of EEG filtering and LSL."""
+    await websocket.accept()
+    _log_websocket_opened(websocket)
+    disconnect: Optional[WebSocketDisconnect] = None
+    after_id = 0
+    try:
+        while True:
+            payload = state.controller.get_ppg_snapshot(after_id)
+            await asyncio.wait_for(
+                websocket.send_json(payload),
+                timeout=float(state.config.streaming.ws_send_timeout_sec),
+            )
+            if payload["data"]:
+                after_id = payload["data"][-1]["id"]
+            # Also consume disconnect events when the device is idle.
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect as exc:
+        disconnect = exc
+    except (asyncio.TimeoutError, OSError):
+        await websocket.close()
+    finally:
+        _log_websocket_closed(websocket, disconnect)
+
+
 @app.websocket("/ws/psd")
 async def psd_ws(websocket: WebSocket):
     """

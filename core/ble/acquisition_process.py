@@ -249,6 +249,7 @@ async def _connect_and_stream(
     last_notify_ts: float = 0.0
     no_data_reported = False
     eeg_last_seq: Optional[int] = None
+    ppg_frame_time = 0.0
     eeg_stats_window_start_ts: float = time.time()
     eeg_stats_last_report_ts: float = time.time()
     eeg_window_valid_frames: int = 0
@@ -519,9 +520,18 @@ async def _connect_and_stream(
 
         def _push_one_frame(one_frame: bytes) -> None:
             nonlocal frame_counter, eeg_last_seq, eeg_window_valid_frames, eeg_window_lost_by_seq
+            nonlocal ppg_frame_time
 
             decoded_frame = parse_frame(one_frame, spec)
             seq = decoded_frame.sequence
+            # Use the device frame cadence so coalesced BLE notifications retain
+            # their sample spacing. Sequence gaps also remain visible in time.
+            frame_period = spec.samples_per_frame / float(cfg.eeg.sampling_rate_hz)
+            if eeg_last_seq is None:
+                ppg_frame_time = time.time()
+            else:
+                frame_steps = ((int(seq) - int(eeg_last_seq)) & 0xFF) if seq is not None else 1
+                ppg_frame_time += max(1, frame_steps) * frame_period
             if seq is not None and eeg_last_seq is not None:
                 gap = (int(seq) - int(eeg_last_seq) - 1) & 0xFF
                 if gap > 0:
@@ -549,9 +559,11 @@ async def _connect_and_stream(
                 )
             if imu and frame_counter % 50 == 0:
                 status_queue.put({"type": "imu", "value": imu})
-            if decoded_frame.ppg and (frame_counter == 1 or frame_counter % 50 == 0):
-                # PPG 不进入 EEG LSL 通道，但保留结构化字段供上层诊断/扩展使用。
-                status_queue.put({"type": "ppg", "value": decoded_frame.ppg})
+            if decoded_frame.ppg:
+                # Forward every updated sample; unchanged frames remain useful
+                # as occasional diagnostic snapshots, never waveform points.
+                if decoded_frame.ppg.get("valid") or frame_counter == 1 or frame_counter % 50 == 0:
+                    status_queue.put({"type": "ppg", "value": decoded_frame.ppg, "ts": ppg_frame_time})
 
         decoded = eeg_decoder.feed(bytes(data))
         eeg_window_invalid_frames += int(decoded.invalid_frames)

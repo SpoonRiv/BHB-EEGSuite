@@ -8,12 +8,15 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
 import { getConfig, getStatus, modeStart, modeStop, getSignalBandpass, setSignalBandpass } from './api.js';
 import { navigate } from './router.js';
 import { EegPsdView } from './eeg_psd.js';
+import { PpgView } from './ppg.js';
 
 const EEG_WAVE_FOCUS_STORAGE_KEY = 'bhb_eeg_wave_focus';
 
 let wsEeg = null;
 let wsDebug = null;
 let psdView = null;
+let ppgView = null;
+let ppgEnabled = false;
 
 let charts = [];
 let channels = 8;
@@ -177,6 +180,7 @@ function renderEegSubtitle() {
 function resizeEegVisualsAfterLayout() {
   const resizeNow = () => {
     if (!eegPageActive || eegViewMode !== 'time') return;
+    if (ppgView) ppgView.resize();
     for (let i = 0; i < charts.length; i++) {
       const chart = charts[i];
       if (!chart) continue;
@@ -978,10 +982,13 @@ function eegRenderLoop() {
   if (eegViewMode === 'time') consumePendingEegChunks(1);
   const now = performance.now();
   const intervalMs = 1000 / Math.max(5, Number(eegRenderFps) || 25);
-  if (eegViewMode === 'time' && eegDataDirty && (now - eegLastRenderAtMs) >= intervalMs) {
-    eegDataDirty = false;
+  if (eegViewMode === 'time' && (now - eegLastRenderAtMs) >= intervalMs) {
     eegLastRenderAtMs = now;
-    renderCharts();
+    if (eegDataDirty) {
+      eegDataDirty = false;
+      renderCharts();
+    }
+    if (ppgView) ppgView.render(now);
   }
   requestAnimationFrame(eegRenderLoop);
 }
@@ -1151,6 +1158,7 @@ export async function enterEegPage() {
   eegSessionLocked = false;
   eegPendingEegChunks = [];
   debugDirty = false;
+  ppgEnabled = false;
   debugRenderLoopActive = false;
   const startBtn = document.getElementById('btn-eeg-start');
   const stopBtn = document.getElementById('btn-eeg-stop');
@@ -1165,6 +1173,7 @@ export async function enterEegPage() {
     channels = cfg && cfg.n_channels ? Number(cfg.n_channels) : 8;
     channelNames = cfg && Array.isArray(cfg.channel_names) ? cfg.channel_names : [];
     eegSamplingRateHz = cfg && cfg.sampling_rate_hz ? Number(cfg.sampling_rate_hz) : 250;
+    ppgEnabled = Number(cfg?.eeg_protocol?.ppg_len_bytes) >= 10;
     const uiWave = cfg && cfg.ui && cfg.ui.waveform ? cfg.ui.waveform : null;
     eegWindowSec = uiWave && typeof uiWave.time_window_sec === 'number' ? Number(uiWave.time_window_sec) : 1.0;
     eegRenderFps = uiWave && typeof uiWave.render_fps_hz === 'number' ? Number(uiWave.render_fps_hz) : 25;
@@ -1242,6 +1251,9 @@ export async function enterEegPage() {
     }
   });
   initCharts();
+  if (ppgView) ppgView.dispose();
+  ppgView = new PpgView({ windowSec: eegWindowSec, enabled: ppgEnabled });
+  ppgView.mount(document.getElementById('charts-grid'));
   observeEegChartLayout();
   if (!eegGridScrollHandler) {
     eegGridScrollHandler = () => {
@@ -1261,6 +1273,7 @@ export async function enterEegPage() {
         document.getElementById('eeg-debug-body')
       );
       charts.forEach(c => c && c.resize());
+      if (ppgView) ppgView.resize();
       if (psdView && typeof psdView.resize === 'function') psdView.resize();
       scheduleVisibleUpdate(true);
     };
@@ -1308,6 +1321,7 @@ export async function enterEegPage() {
       const t = ev && ev.detail && ev.detail.theme ? ev.detail.theme : (document.documentElement.getAttribute('data-theme') || 'light');
       applyThemeToCharts(t);
       if (psdView) psdView.setTheme(t);
+      if (ppgView) ppgView.setTheme(t);
     };
     window.addEventListener('bhb-theme-change', themeChangeHandler);
   }
@@ -1319,6 +1333,7 @@ export async function enterEegPage() {
       }
       eegSessionLocked = true;
       clearEegWaveformData();
+      if (ppgView) { ppgView.clear(); ppgView.connect(); }
       startBtn.disabled = true;
       if (stopBtn) stopBtn.disabled = true;
       try {
@@ -1343,6 +1358,7 @@ export async function enterEegPage() {
       if (wsEeg) { try { wsEeg.close(); } catch (_) {} wsEeg = null; }
       if (wsDebug) { try { wsDebug.close(); } catch (_) {} wsDebug = null; }
       if (psdView) psdView.close();
+      if (ppgView) ppgView.close();
       stopBtn.disabled = true;
       if (startBtn) startBtn.disabled = true;
       try {
@@ -1395,6 +1411,7 @@ export async function leaveEegPage() {
   if (wsEeg) { try { wsEeg.close(); } catch (_) {} wsEeg = null; }
   if (wsDebug) { try { wsDebug.close(); } catch (_) {} wsDebug = null; }
   if (psdView) { try { psdView.dispose(); } catch (_) {} psdView = null; }
+  if (ppgView) { ppgView.dispose(); ppgView = null; }
   if (themeListenerAttached && themeChangeHandler) {
     window.removeEventListener('bhb-theme-change', themeChangeHandler);
     themeListenerAttached = false;
