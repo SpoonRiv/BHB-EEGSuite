@@ -60,13 +60,7 @@
 }
 .module-manager { width: min(720px, calc(100vw - 36px)); max-width: 720px; }
 .music-mode-hero { background: radial-gradient(ellipse at center, #352167, #0a1220); }
-.music-mode-art { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: #b8a5ff; }
-.music-mode-art span { font-size: 76px; margin-right: 26px; text-shadow: 0 0 35px #7561ff; }
-.music-mode-art i { width: 5px; border-radius: 9px; height: 26px; background: linear-gradient(#bdaaff, #7561ff); box-shadow: 0 0 18px #7561ff55; }
-.music-mode-art i:nth-child(3n) { height: 60px; }
-.music-mode-art i:nth-child(3n+1) { height: 42px; }
 .mode-card--uninstalled .music-mode-hero { filter: grayscale(1); }
-.mode-card--uninstalled .music-mode-art { opacity: .2; }
 .mode-card--uninstalled .mode-card__arrow { visibility: hidden; }
 .module-action--busy::before { content: ""; width: 14px; height: 14px; box-sizing: border-box; border: 2px solid rgba(255, 255, 255, .35); border-top-color: currentColor; border-radius: 50%; animation: module-install-spin .8s linear infinite; }
 @keyframes module-install-spin { to { transform: rotate(360deg); } }

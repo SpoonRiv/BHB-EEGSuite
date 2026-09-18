@@ -1,5 +1,5 @@
 app:
-  ui_version: "3.5.1"
+  ui_version: "3.5.2"
 
 ui:
   waveform:
