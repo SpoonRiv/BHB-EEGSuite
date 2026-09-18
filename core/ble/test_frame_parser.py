@@ -39,7 +39,29 @@ def _frame(sequence: int = 7, battery: bytes = b"\x00\x64") -> bytes:
     return frame
 
 
+def _legacy_checksum_frame(sequence: int = 7) -> bytes:
+    frame = bytearray(_frame(sequence=sequence))
+    checksum_offset = _spec().checksum_offset
+    assert checksum_offset is not None
+    frame[checksum_offset] = sum(frame[_spec().header_len_bytes:checksum_offset]) & 0xFF
+    return bytes(frame)
+
+
 class FrameParserTests(unittest.TestCase):
+    def test_ppg_layout_keeps_ch8_frame_length_at_140_bytes(self) -> None:
+        legacy = FrameSpec(
+            channels=8,
+            header_len_bytes=3,
+            bytes_per_sample_per_channel=3,
+            samples_per_frame=5,
+            trigger_len_bytes=1,
+            imu_len_bytes=12,
+            battery_len_bytes=2,
+            tail_len_bytes=2,
+        )
+        self.assertEqual(legacy.frame_len_bytes, 140)
+        self.assertEqual(_spec().frame_len_bytes, legacy.frame_len_bytes)
+
     def test_ch8_frame_layout_and_ppg_are_decoded(self) -> None:
         decoded = parse_frame(_frame(), _spec())
         self.assertEqual(decoded.sequence, 7)
@@ -62,6 +84,16 @@ class FrameParserTests(unittest.TestCase):
         self.assertTrue(spec.validate_checksum(bytes(frame)))
         frame[2] ^= 0x01
         self.assertFalse(spec.validate_checksum(bytes(frame)))
+
+    def test_legacy_checksum_without_sequence_remains_accepted(self) -> None:
+        spec = _spec()
+        frame = _legacy_checksum_frame(sequence=9)
+        self.assertTrue(spec.validate_checksum(frame))
+        decoded = parse_frame(frame, spec)
+        self.assertEqual(decoded.sequence, 9)
+        self.assertEqual(len(decoded.samples), 5)
+        self.assertEqual(len(decoded.samples[0]), 9)
+        self.assertEqual(decoded.ppg["green"], 0x010203)
 
     def test_battery_ffff_is_invalid_and_trigger_reserved_bits_are_masked(self) -> None:
         decoded = parse_frame(_frame(battery=b"\xff\xff"), _spec())

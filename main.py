@@ -1421,7 +1421,7 @@ async def get_config():
                 + int(frame_cfg.battery_len_bytes)
                 + int(frame_cfg.tail_len_bytes)
             ),
-            "checksum": "sum(bytes[2:-2]) & 0xff; frame tail 0xcc",
+            "checksum": "sum(bytes[2:-2]) & 0xff; legacy sum(bytes[3:-2]) also accepted; frame tail 0xcc",
         }
     return {
         "ui_version": ui_version,

@@ -1266,7 +1266,7 @@ input[type="checkbox"] {
 }
 
 .chart-container.ppg-panel {
-  height: 218px;
+  height: 290px;
   border-color: rgba(106, 165, 236, 0.28);
   background: linear-gradient(135deg, #112f51, #0b203a);
 }
@@ -1281,7 +1281,7 @@ input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 38px;
+  height: 28px;
   padding: 0 16px;
   border-bottom: 1px solid rgba(113, 168, 225, 0.18);
   color: #daebff;
@@ -1291,7 +1291,7 @@ input[type="checkbox"] {
 .ppg-heading-title { font-weight: 750; }
 .ppg-heading-title span { margin-left: 10px; font-weight: 400; opacity: 0.7; }
 .ppg-status { font-size: 11px; color: #a8cbee; }
-.ppg-chart { width: 100%; height: 180px; }
+.ppg-chart { width: 100%; height: 260px; }
 [data-theme="light"] .ppg-heading { color: #234d79; }
 [data-theme="light"] .ppg-status { color: #476d94; }
 

@@ -94,7 +94,8 @@ class FrameSpec:
         """校验长度、帧头、帧尾和 SUM。
 
         协议文档规定 SUM 排除帧头、SUM 自身和帧尾，但包含帧序号。因此
-        累加范围从两个帧头字节之后开始，而不是从 ``header_len_bytes`` 开始。
+        首选从两个帧头字节之后开始累加；同时兼容旧版实现中从
+        ``header_len_bytes`` 开始、排除帧序号的算法。
         """
         expected_len = int(self.frame_len_bytes)
         if len(frame) != expected_len:
@@ -109,9 +110,17 @@ class FrameSpec:
             return True
         if int(self.checksum_len_bytes) != 1:
             raise ValueError("当前协议仅支持 1 字节 SUM")
-        # 只排除帧头（AA BB）、SUM 和帧尾；序号位于累加范围内。
+        # 协议文档规定序号也参与 SUM。部分旧版固件/上位机实现曾从
+        # header_len_bytes 开始累加（把序号排除在外），这里保留兼容校验，
+        # 否则帧长虽正确，所有 EEG/PPG 帧仍会在组帧阶段被静默丢弃。
+        actual_sum = int(frame[checksum_offset])
         expected_sum = sum(frame[2:checksum_offset]) & 0xFF
-        return int(frame[checksum_offset]) == expected_sum
+        if actual_sum == expected_sum:
+            return True
+        if int(self.header_len_bytes) > 2:
+            legacy_sum = sum(frame[int(self.header_len_bytes):checksum_offset]) & 0xFF
+            return actual_sum == legacy_sum
+        return False
 
 
 @dataclass(frozen=True)

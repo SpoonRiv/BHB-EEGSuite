@@ -32,6 +32,8 @@ export class PpgView {
         <span class="ppg-status" role="status">等待采集</span>
       </div>
       <div class="ppg-chart" id="chart-ppg"></div>`;
+    // Keep PPG above the eight EEG channels while preserving the existing
+    // EEG waveform cards below it.
     grid.prepend(this.panel);
     this.statusEl = this.panel.querySelector('.ppg-status');
     this.chartEl = this.panel.querySelector('.ppg-chart');
@@ -43,9 +45,9 @@ export class PpgView {
     this.chart.setOption({
       animation: false,
       backgroundColor: 'transparent',
-      grid: CHANNELS.map((_, i) => ({ top: 8 + i * 57, height: 42, left: 120, right: 10 })),
+      grid: CHANNELS.map((_, i) => ({ top: 8 + i * 82, height: 62, left: 120, right: 10 })),
       title: CHANNELS.map((channel, i) => ({
-        text: channel.label, left: 12, top: 16 + i * 57,
+        text: channel.label, left: 12, top: 24 + i * 82,
         textStyle: { fontSize: 12, fontWeight: 700 },
       })),
       xAxis: CHANNELS.map((_, i) => ({
