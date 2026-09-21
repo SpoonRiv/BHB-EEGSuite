@@ -49,6 +49,7 @@ raw_float32.bin
 .qoder/
 .codex_tmp/
 .uploads/
+.workbuddy/
 
 # Local reference & project rules (runtime should not depend on these)
 ref/
