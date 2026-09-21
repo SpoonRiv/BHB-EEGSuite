@@ -23,7 +23,14 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
             }
         })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <!-- ECharts 本地内置，避免离线或受限网络环境导致波形无法渲染。 -->
+    <script src="vendor/echarts.min.js"></script>
+    <script>
+        // 仅在本地资源缺失时回退到 CDN，正常离线运行不依赖外网。
+        if (typeof window.echarts === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"><\/script>');
+        }
+    </script>
     <link rel="stylesheet" href="styles/app.css" />
     <link rel="stylesheet" href="styles/polish.css" />
     <link rel="stylesheet" href="styles/modules.css" />
