@@ -174,6 +174,10 @@ eeg:
         imu_len_bytes: 0        # CH8 V1.2 不包含 IMU 段
         battery_len_bytes: 2
         tail_len_bytes: 2      # 校验段 1 字节 (SUM) + 帧尾 1 字节 (0xCC)
+        # 实机 MSM008S00 SUM：排除 seq、漏加绿光最低字节（偏移 127），
+        # 三路 PPG 的高字节校验项使用 bits[19:12] 而非 bits[23:16]。
+        # 只对上述 CH8 PPG 布局启用兼容；仍接受标准和旧版 SUM。固件修复后可关闭。
+        allow_ch8_ppg_checksum_quirk: true
       conversion:
         # Vin = raw_signed * 2 * Vref / (ADC增益 * G * 2^位宽)
         vref_volts: 4.5

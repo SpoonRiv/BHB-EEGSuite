@@ -36,6 +36,7 @@ class FrameSpec:
     header_bytes: Tuple[int, int] = (0xAA, 0xBB)
     tail_byte: int = 0xCC
     checksum_len_bytes: int = 1
+    allow_ch8_ppg_checksum_quirk: bool = False
 
     def __post_init__(self) -> None:
         for name in (
@@ -95,7 +96,8 @@ class FrameSpec:
 
         协议文档规定 SUM 排除帧头、SUM 自身和帧尾，但包含帧序号。因此
         首选从两个帧头字节之后开始累加；同时兼容旧版实现中从
-        ``header_len_bytes`` 开始、排除帧序号的算法。
+        ``header_len_bytes`` 开始、排除帧序号的算法。CH8 PPG 固件的
+        特定 SUM 缺陷必须通过 allow_ch8_ppg_checksum_quirk 显式启用。
         """
         expected_len = int(self.frame_len_bytes)
         if len(frame) != expected_len:
@@ -119,7 +121,27 @@ class FrameSpec:
             return True
         if int(self.header_len_bytes) > 2:
             legacy_sum = sum(frame[int(self.header_len_bytes):checksum_offset]) & 0xFF
-            return actual_sum == legacy_sum
+            if actual_sum == legacy_sum:
+                return True
+            # 实机 MSM008S00 的空载及手指接触数据符合以下 SUM：排除 seq，
+            # 漏加绿光最低字节，并以每路 PPG 的 bits[19:12] 代替 bits[23:16]。
+            # 空载值很小时高位均为 0，仅补偿 offset 127 会掩盖此位段错误；
+            # 按手后的大数值必须按完整规则校验。数据本身仍按原始 24-bit 解码。
+            # 仅兼容这一种已验证的 140-byte 布局，不对其他协议放宽校验。
+            if self.allow_ch8_ppg_checksum_quirk and (
+                self.channels, self.header_len_bytes, self.bytes_per_sample_per_channel,
+                self.samples_per_frame, self.trigger_len_bytes, self.ppg_len_bytes,
+                self.reserved_len_bytes, self.imu_len_bytes, self.battery_len_bytes,
+                self.tail_len_bytes,
+            ) == (8, 3, 3, 5, 1, 10, 2, 0, 2, 2):
+                firmware_sum = legacy_sum - frame[127]
+                for high_byte_offset in (125, 128, 131):
+                    # (value >> 12) & 0xFF, without changing the PPG payload.
+                    checksum_high = ((frame[high_byte_offset] & 0x0F) << 4) | (
+                        frame[high_byte_offset + 1] >> 4
+                    )
+                    firmware_sum += checksum_high - frame[high_byte_offset]
+                return actual_sum == (firmware_sum & 0xFF)
         return False
 
 

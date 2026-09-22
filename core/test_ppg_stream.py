@@ -84,7 +84,7 @@ class PpgStreamTests(unittest.TestCase):
 class PpgAcquisitionTests(unittest.IsolatedAsyncioTestCase):
     async def test_coalesced_frames_keep_every_valid_update_and_device_timing(self):
         stop = threading.Event()
-        statuses, commands = queue.Queue(), queue.Queue()
+        statuses, commands, ppg_messages = queue.Queue(), queue.Queue(), queue.Queue()
         commands.put({"type": "start_mode", "mode": "eeg"})
         client = MagicMock()
         client.is_connected = True
@@ -97,7 +97,9 @@ class PpgAcquisitionTests(unittest.IsolatedAsyncioTestCase):
         with patch("core.ble.acquisition_process.BleakClient", return_value=client), patch(
             "core.ble.acquisition_process.LslOutletWriter", return_value=writer
         ):
-            task = asyncio.create_task(_connect_and_stream(CONFIG, stop, statuses, commands, None, "test", "test"))
+            task = asyncio.create_task(
+                _connect_and_stream(CONFIG, stop, statuses, commands, None, "test", "test", ppg_messages)
+            )
             try:
                 started = False
                 for _ in range(150):
@@ -122,7 +124,11 @@ class PpgAcquisitionTests(unittest.IsolatedAsyncioTestCase):
                 messages = []
                 while not statuses.empty():
                     messages.append(statuses.get_nowait())
-                samples = [m for m in messages if m["type"] == "ppg" and m["value"]["valid"]]
+                ppg_out = []
+                while not ppg_messages.empty():
+                    ppg_out.append(ppg_messages.get_nowait())
+                samples = [m for m in ppg_out if m["type"] == "ppg" and m["value"]["valid"]]
+                self.assertFalse(any(m.get("type") == "ppg" for m in messages))
                 self.assertEqual(len(samples), 40)
                 self.assertAlmostEqual(samples[1]["ts"] - samples[0]["ts"], 0.02, places=5)
                 self.assertAlmostEqual(samples[2]["ts"] - samples[1]["ts"], 0.04, places=5)

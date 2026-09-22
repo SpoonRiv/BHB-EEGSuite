@@ -85,6 +85,7 @@ async def _connect_and_stream(
     debug_queue: Optional[multiprocessing.Queue],
     connect_address: Optional[str],
     connect_name: Optional[str],
+    ppg_queue: Optional[multiprocessing.Queue] = None,
 ) -> None:
     """
     BLE 连接与数据接收主协程。
@@ -107,7 +108,12 @@ async def _connect_and_stream(
 
     address: Optional[str] = (connect_address or "").strip() or cfg.bluetooth.mac_address.strip() or None
     resolved_name = (connect_name or "").strip() or cfg.bluetooth.target_device
-    if address and not (connect_name or "").strip():
+    # Keep the BLEDevice returned by the scan. Windows WinRT can discover a
+    # peripheral successfully but fail a second address-only lookup immediately
+    # afterwards; passing the discovered object preserves its advertisement
+    # identity and avoids that race.
+    ble_device: Any = None
+    if address:
         try:
             timeout_sec = float(cfg.bluetooth.scan.retry_interval_sec)
             if timeout_sec <= 0:
@@ -115,6 +121,7 @@ async def _connect_and_stream(
             devices = await BleakScanner.discover(timeout=timeout_sec)
             for dev in devices:
                 if str(getattr(dev, "address", "") or "") == str(address):
+                    ble_device = dev
                     n = str(getattr(dev, "name", "") or "").strip()
                     if n:
                         resolved_name = n
@@ -145,6 +152,7 @@ async def _connect_and_stream(
             return
         address = target.address
         resolved_name = target.name
+        # find_device_by_spec returns BleTarget (name/address), not BLEDevice.
 
     module_info: Optional[BleModuleNameInfo] = parse_ble_module_name(resolved_name, str(cfg.bluetooth.module_name_regex or ""))
     if module_info is not None:
@@ -207,6 +215,7 @@ async def _connect_and_stream(
                 imu_len_bytes=eeg_proto.frame.imu_len_bytes,
                 battery_len_bytes=eeg_proto.frame.battery_len_bytes,
                 tail_len_bytes=eeg_proto.frame.tail_len_bytes,
+                allow_ch8_ppg_checksum_quirk=eeg_proto.frame.allow_ch8_ppg_checksum_quirk,
             )
         if eeg_decoder is None:
             eeg_decoder = FrameStreamDecoder(spec)
@@ -260,6 +269,27 @@ async def _connect_and_stream(
     last_start_cmd_ts: float = 0.0
     current_mode: str = "idle"
     eeg_streaming_enabled = False
+
+    def _publish_ppg(message: Dict[str, Any]) -> None:
+        """
+        将高频 PPG 数据投递到独立队列，避免阻塞通用状态队列。
+
+        ``ppg_queue`` 为空时保留旧调用方的兼容路径；生产采集进程会传入
+        独立队列，并使用 ``put_nowait``，这样 BLE 通知回调不会等待主进程
+        消费诊断/生命周期状态。
+        """
+        target = ppg_queue if ppg_queue is not None else status_queue
+        try:
+            target.put_nowait(message)
+        except AttributeError:
+            # 兼容极简测试队列或第三方队列实现。
+            target.put(message)
+        except queue.Full:
+            # PPG 只影响独立的可视化通道；队列满时丢弃该点，不能反过来
+            # 阻塞 EEG 采集回调。
+            return
+        except (EOFError, OSError, ValueError):
+            return
 
     imp_buf = bytearray()
     imp_frame_counter = 0
@@ -563,7 +593,7 @@ async def _connect_and_stream(
                 # Forward every updated sample; unchanged frames remain useful
                 # as occasional diagnostic snapshots, never waveform points.
                 if decoded_frame.ppg.get("valid") or frame_counter == 1 or frame_counter % 50 == 0:
-                    status_queue.put({"type": "ppg", "value": decoded_frame.ppg, "ts": ppg_frame_time})
+                    _publish_ppg({"type": "ppg", "value": decoded_frame.ppg, "ts": ppg_frame_time})
 
         decoded = eeg_decoder.feed(bytes(data))
         eeg_window_invalid_frames += int(decoded.invalid_frames)
@@ -593,7 +623,7 @@ async def _connect_and_stream(
 
     while not stop_event.is_set():
         try:
-            async with BleakClient(address) as client:
+            async with BleakClient(ble_device or address) as client:
                 status_payload = {"type": "connected", "address": address, "name": resolved_name}
                 if module_info is not None:
                     status_payload["module"] = {"eeg_channels": int(module_info.eeg_channels), "stim_channels": int(module_info.stim_channels)}
@@ -943,12 +973,24 @@ def run_ble_acquisition_process(
     debug_queue: Optional[multiprocessing.Queue] = None,
     connect_address: Optional[str] = None,
     connect_name: Optional[str] = None,
+    ppg_queue: Optional[multiprocessing.Queue] = None,
 ) -> None:
     """
     BLE 采集进程入口。
     """
     try:
-        asyncio.run(_connect_and_stream(config_path, stop_event, status_queue, command_queue, debug_queue, connect_address, connect_name))
+        asyncio.run(
+            _connect_and_stream(
+                config_path,
+                stop_event,
+                status_queue,
+                command_queue,
+                debug_queue,
+                connect_address,
+                connect_name,
+                ppg_queue,
+            )
+        )
     except KeyboardInterrupt:
         pass
     except Exception as exc:

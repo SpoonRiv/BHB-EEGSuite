@@ -105,6 +105,7 @@ class FrameProtocolConfig:
     imu_len_bytes: int
     battery_len_bytes: int
     tail_len_bytes: int
+    allow_ch8_ppg_checksum_quirk: bool = False
 
 
 
@@ -723,6 +724,7 @@ def load_config(config_path: str) -> AppConfig:
             imu_len_bytes=int(frame_cfg_raw.get("imu_len_bytes", imu_default)),
             battery_len_bytes=int(frame_cfg_raw.get("battery_len_bytes", 2)),
             tail_len_bytes=int(frame_cfg_raw.get("tail_len_bytes", 2)),
+            allow_ch8_ppg_checksum_quirk=bool(frame_cfg_raw.get("allow_ch8_ppg_checksum_quirk", False)),
         )
 
     def _build_adc_conversion(variant_raw: Dict[str, Any], variant_name: str) -> Optional[EegAdcConversionConfig]:
