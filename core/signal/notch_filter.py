@@ -50,7 +50,14 @@ class NotchFilter:
         fs = float(cfg.sampling_rate_hz)
         f0 = float(cfg.freq_hz)
         q = float(cfg.quality_factor)
-        self._b, self._a = iirnotch(w0=f0, Q=q, fs=fs)
+        # A notch at or above Nyquist is not realizable. Keep the filter as a
+        # transparent pass-through so callers can safely share this class
+        # with lower-rate streams such as PPG.
+        self._enabled = bool(fs > 0 and 0 < f0 < fs / 2.0 and q > 0)
+        if self._enabled:
+            self._b, self._a = iirnotch(w0=f0, Q=q, fs=fs)
+        else:
+            self._b, self._a = None, None
 
         self._channel_count = max(0, int(cfg.channel_count))
         self._has_trigger = bool(cfg.has_trigger_channel)
@@ -76,7 +83,7 @@ class NotchFilter:
         Returns:
             List[List[float]]: 同形状的滤波后数据。
         """
-        if not chunk:
+        if not chunk or not self._enabled:
             return chunk
         if self._n_filter_ch <= 0:
             return chunk

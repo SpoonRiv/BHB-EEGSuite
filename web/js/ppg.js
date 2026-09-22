@@ -6,6 +6,9 @@ const CHANNELS = [
   { key: 'infrared', label: '近红外', light: '#405dc4', dark: '#afbeff' },
 ];
 
+const PPG_ROW_HEIGHT = 140;
+const PPG_PLOT_HEIGHT = 120;
+
 export class PpgView {
   constructor({ windowSec = 2, enabled = false } = {}) {
     this.windowSec = Math.max(0.2, Number(windowSec) || 2);
@@ -28,7 +31,7 @@ export class PpgView {
     this.panel.setAttribute('aria-label', 'PPG 三路光学波形');
     this.panel.innerHTML = `
       <div class="ppg-heading">
-        <div class="ppg-heading-title">PPG 波形 <span>原始值</span></div>
+        <div class="ppg-heading-title">PPG 波形 <span>滤波值</span></div>
         <span class="ppg-status" role="status">等待采集</span>
       </div>
       <div class="ppg-chart" id="chart-ppg"></div>`;
@@ -45,9 +48,14 @@ export class PpgView {
     this.chart.setOption({
       animation: false,
       backgroundColor: 'transparent',
-      grid: CHANNELS.map((_, i) => ({ top: 8 + i * 82, height: 62, left: 120, right: 10 })),
+      grid: CHANNELS.map((_, i) => ({
+        top: 8 + i * PPG_ROW_HEIGHT,
+        height: PPG_PLOT_HEIGHT,
+        left: 120,
+        right: 10,
+      })),
       title: CHANNELS.map((channel, i) => ({
-        text: channel.label, left: 12, top: 24 + i * 82,
+        text: channel.label, left: 12, top: 24 + i * PPG_ROW_HEIGHT,
         textStyle: { fontSize: 12, fontWeight: 700 },
       })),
       xAxis: CHANNELS.map((_, i) => ({
@@ -101,7 +109,7 @@ export class PpgView {
     let received = false;
     for (const sample of Array.isArray(payload.data) ? payload.data : []) {
       if (!sample || !Number.isFinite(sample.ts) || !Number.isInteger(sample.id) || sample.id <= this.lastId) continue;
-      if (!CHANNELS.every(({ key }) => Number.isInteger(sample[key]) && sample[key] >= 0 && sample[key] <= 0xffffff)) continue;
+      if (!CHANNELS.every(({ key }) => Number.isFinite(Number(sample[key])))) continue;
       const previous = this.samples[this.samples.length - 1];
       if (previous && sample.ts <= previous.ts) continue;
       // A pause in sensor updates should not be drawn as a continuous signal.
