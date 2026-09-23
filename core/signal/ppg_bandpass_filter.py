@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Stateful Butterworth band-pass filtering for the independent PPG stream."""
+"""Stateful PPG high-pass and power-line notch filtering."""
 
 from __future__ import annotations
 
@@ -14,8 +14,7 @@ from scipy.signal import butter, sosfilt, sosfilt_zi
 # PPG filtering is intentionally fixed in code.  The current CH8 protocol
 # emits one PPG point per five 500-Hz EEG samples, i.e. 100 Hz.
 PPG_SAMPLING_RATE_HZ = 100.0
-PPG_LOWCUT_HZ = 0.2
-PPG_HIGHCUT_HZ = 49.5
+PPG_LOWCUT_HZ = 0.5
 PPG_FILTER_ORDER = 4
 
 
@@ -23,7 +22,6 @@ PPG_FILTER_ORDER = 4
 class PpgBandpassFilterConfig:
     sampling_rate_hz: float = PPG_SAMPLING_RATE_HZ
     lowcut_hz: float = PPG_LOWCUT_HZ
-    highcut_hz: float = PPG_HIGHCUT_HZ
     order: int = PPG_FILTER_ORDER
     enabled: bool = True
 
@@ -37,20 +35,13 @@ class PpgBandpassFilter:
         cfg = cfg or PpgBandpassFilterConfig()
         self._sampling_rate_hz = float(cfg.sampling_rate_hz)
         self._lowcut_hz = float(cfg.lowcut_hz)
-        self._requested_highcut_hz = float(cfg.highcut_hz)
         self._order = int(cfg.order)
         self._enabled = bool(cfg.enabled)
-        self._effective_highcut_hz = self._effective_highcut(self._requested_highcut_hz)
         self._sos: Optional[np.ndarray] = None
         self._states: Optional[np.ndarray] = None
         self._primed = False
         if self._enabled:
             self._build_sos()
-
-    def _effective_highcut(self, requested_hz: float) -> float:
-        nyquist = self._sampling_rate_hz / 2.0
-        # scipy requires highcut < Nyquist.
-        return min(float(requested_hz), nyquist * 0.99)
 
     def _build_sos(self) -> None:
         self._sos = None
@@ -59,13 +50,12 @@ class PpgBandpassFilter:
         if self._sampling_rate_hz <= 0 or self._lowcut_hz <= 0:
             return
         nyquist = self._sampling_rate_hz / 2.0
-        high = self._effective_highcut_hz
-        if not np.isfinite(high) or self._lowcut_hz >= high or high >= nyquist:
+        if not np.isfinite(self._lowcut_hz) or self._lowcut_hz >= nyquist:
             return
         self._sos = butter(
             max(1, self._order),
-            [self._lowcut_hz, high],
-            btype="band",
+            self._lowcut_hz,
+            btype="highpass",
             fs=self._sampling_rate_hz,
             output="sos",
         )
@@ -118,14 +108,6 @@ class PpgBandpassFilter:
     @property
     def lowcut_hz(self) -> float:
         return self._lowcut_hz
-
-    @property
-    def requested_highcut_hz(self) -> float:
-        return self._requested_highcut_hz
-
-    @property
-    def effective_highcut_hz(self) -> float:
-        return self._effective_highcut_hz
 
     @property
     def order(self) -> int:
