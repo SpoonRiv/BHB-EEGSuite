@@ -10,24 +10,20 @@ from typing import Any, Dict, Optional
 import numpy as np
 from scipy.signal import butter, sosfilt, sosfilt_zi
 
-from core.signal.notch_filter import NotchFilter, NotchFilterConfig
-
 
 # PPG filtering is intentionally fixed in code.  The current CH8 protocol
 # emits one PPG point per five 500-Hz EEG samples, i.e. 100 Hz.
 PPG_SAMPLING_RATE_HZ = 100.0
 PPG_LOWCUT_HZ = 0.2
-PPG_REQUESTED_HIGHCUT_HZ = 1000.0
+PPG_HIGHCUT_HZ = 49.5
 PPG_FILTER_ORDER = 4
-PPG_NOTCH_FREQ_HZ = 50.0
-PPG_NOTCH_QUALITY_FACTOR = 30.0
 
 
 @dataclass(frozen=True)
 class PpgBandpassFilterConfig:
     sampling_rate_hz: float = PPG_SAMPLING_RATE_HZ
     lowcut_hz: float = PPG_LOWCUT_HZ
-    highcut_hz: float = PPG_REQUESTED_HIGHCUT_HZ
+    highcut_hz: float = PPG_HIGHCUT_HZ
     order: int = PPG_FILTER_ORDER
     enabled: bool = True
 
@@ -45,15 +41,6 @@ class PpgBandpassFilter:
         self._order = int(cfg.order)
         self._enabled = bool(cfg.enabled)
         self._effective_highcut_hz = self._effective_highcut(self._requested_highcut_hz)
-        self._notch = NotchFilter(
-            NotchFilterConfig(
-                sampling_rate_hz=int(self._sampling_rate_hz),
-                freq_hz=PPG_NOTCH_FREQ_HZ,
-                quality_factor=PPG_NOTCH_QUALITY_FACTOR,
-                channel_count=len(self.CHANNELS),
-                has_trigger_channel=False,
-            )
-        )
         self._sos: Optional[np.ndarray] = None
         self._states: Optional[np.ndarray] = None
         self._primed = False
@@ -62,9 +49,7 @@ class PpgBandpassFilter:
 
     def _effective_highcut(self, requested_hz: float) -> float:
         nyquist = self._sampling_rate_hz / 2.0
-        # scipy requires highcut < Nyquist. Leave a small margin for stable
-        # SOS coefficients; the requested 1 kHz upper bound is therefore
-        # automatically limited to 99% of Nyquist for this 100-Hz stream.
+        # scipy requires highcut < Nyquist.
         return min(float(requested_hz), nyquist * 0.99)
 
     def _build_sos(self) -> None:
@@ -88,7 +73,6 @@ class PpgBandpassFilter:
     def reset(self) -> None:
         self._states = None
         self._primed = False
-        self._notch.reset()
 
     def apply(self, value: Dict[str, Any]) -> Dict[str, Any]:
         """Return one filtered PPG sample, preserving its validity marker."""
@@ -102,11 +86,6 @@ class PpgBandpassFilter:
             return value
         if not np.all(np.isfinite(sample)):
             return value
-
-        # Reuse the application's existing 50-Hz notch implementation. At
-        # the current 100-Hz PPG update rate it is transparently bypassed by
-        # NotchFilter because 50 Hz is exactly Nyquist.
-        sample = np.asarray(self._notch.apply([sample.tolist()])[0], dtype=np.float64)
 
         if self._states is None:
             zi = sosfilt_zi(self._sos).astype(np.float64)
