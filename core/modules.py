@@ -79,7 +79,6 @@ class OptionalModuleManager:
         return {"modules": [{
             "id": self.MODULE_ID, "name": self.NAME,
             "description": "文本与音频同步呈现，复用上位机脑电采集，支持逐项记录和批量导出。",
-            "version": str(package.get("version", "1.0.0")),
             "installed": installed, "available": available,
             "busy": self.active or self.requests > 0 or self.lock.locked(),
             "error": self.error,

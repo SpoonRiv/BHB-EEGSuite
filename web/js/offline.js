@@ -83,21 +83,25 @@ function setSessionInfo(session) {
 }
 
 function setFilterVisible(enabled) {
-  const block = document.getElementById('offline-filter-block');
-  const filteredBlock = document.getElementById('offline-filtered-block');
-  const idle = document.getElementById('offline-filter-idle');
+  const blocks = [
+    document.getElementById('offline-filter-block'),
+    document.getElementById('offline-filtered-block'),
+  ];
   const toggle = document.getElementById('offline-filter-enable');
-  if (block) block.style.display = enabled ? '' : 'none';
-  if (filteredBlock) filteredBlock.style.display = enabled ? '' : 'none';
-  if (idle) idle.style.display = enabled ? 'none' : '';
+  for (const block of blocks) {
+    if (!block) continue;
+    block.setAttribute('aria-disabled', String(!enabled));
+    block.querySelectorAll('input').forEach(input => { input.disabled = !enabled; });
+  }
   if (toggle) toggle.setAttribute('aria-expanded', String(enabled));
 }
 
 function buildTargets() {
   const rawCsv = !!document.getElementById('offline-raw-csv')?.checked;
   const rawEdf = !!document.getElementById('offline-raw-edf')?.checked;
-  const filCsv = !!document.getElementById('offline-fil-csv')?.checked;
-  const filEdf = !!document.getElementById('offline-fil-edf')?.checked;
+  const filterEnabled = !!document.getElementById('offline-filter-enable')?.checked;
+  const filCsv = filterEnabled && !!document.getElementById('offline-fil-csv')?.checked;
+  const filEdf = filterEnabled && !!document.getElementById('offline-fil-edf')?.checked;
   const out = [];
   if (rawCsv) out.push({ kind: 'raw', fmt: 'csv' });
   if (rawEdf) out.push({ kind: 'raw', fmt: 'edf' });

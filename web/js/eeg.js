@@ -589,7 +589,7 @@ function buildSettingsPopover() {
 
   const applyBtn = document.createElement('button');
   applyBtn.type = 'button';
-  applyBtn.className = 'eeg-settings-apply-btn';
+  applyBtn.className = 'btn btn--ghost eeg-settings-apply-btn';
   applyBtn.textContent = '应用';
   sec3.appendChild(applyBtn);
   body.appendChild(sec3);

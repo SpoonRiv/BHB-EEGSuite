@@ -15,7 +15,7 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
-from core.offline.offline_service import ExportTarget
+from core.offline.offline_service import BandpassConfig, ExportTarget
 
 
 class MusicService:
@@ -63,7 +63,7 @@ class MusicService:
             return dict(self.last_result)
         return {"active": False, "results": []}
 
-    async def export_all(self, formats=None, saved_results=None):
+    async def export_all(self, targets=None, bandpass=None, saved_results=None):
         """Export every completed trial into one dated directory with 1-10 folders."""
         if self.active:
             raise ValueError("实验仍在进行中，请停止实验后再导出")
@@ -74,14 +74,39 @@ class MusicService:
         if not results:
             raise ValueError("暂无可导出的文本-音频实验会话")
 
-        requested = formats if isinstance(formats, (list, tuple)) else ["csv", "edf"]
-        formats = []
+        requested = targets if isinstance(targets, (list, tuple)) else []
+        target_specs = []
+        seen_targets = set()
         for value in requested:
-            fmt = str(value or "").strip().lower()
-            if fmt in {"csv", "edf"} and fmt not in formats:
-                formats.append(fmt)
-        if not formats:
-            raise ValueError("至少选择一种导出格式")
+            if not isinstance(value, dict):
+                continue
+            kind = str(value.get("kind") or "").strip().lower()
+            fmt = str(value.get("fmt") or "").strip().lower()
+            key = (kind, fmt)
+            if kind in {"raw", "filtered"} and fmt in {"csv", "edf"} and key not in seen_targets:
+                seen_targets.add(key)
+                target_specs.append(key)
+        if not target_specs:
+            raise ValueError("至少选择一种导出文件")
+
+        bandpass = bandpass if isinstance(bandpass, dict) else {}
+        want_filtered = any(kind == "filtered" for kind, _ in target_specs)
+        bp_enabled = bool(bandpass.get("enabled"))
+        try:
+            lowcut_hz = float(bandpass.get("lowcut_hz", 3.0))
+            highcut_hz = float(bandpass.get("highcut_hz", 50.0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("滤波截止频率必须是有效数字") from exc
+        if want_filtered and not bp_enabled:
+            raise ValueError("已选择滤波导出，请先启用带通滤波")
+        if bp_enabled and not (0 < lowcut_hz < highcut_hz):
+            raise ValueError("滤波参数非法：需要满足 0 < 低频截止 < 高频截止")
+        bp_config = BandpassConfig(
+            enabled=bp_enabled,
+            lowcut_hz=lowcut_hz,
+            highcut_hz=highcut_hz,
+            order=int(self.state.config.offline.filter.order),
+        )
 
         root = Path(self.state.offline.data_root_dir)
         date_dir = root / datetime.now().strftime("%Y%m%d")
@@ -117,14 +142,22 @@ class MusicService:
             category = str(song.get("category") or number)
             name = str(song.get("name") or "eeg")
             stem = f"Category_{category}_{name}"
-            targets = [ExportTarget(kind="raw", fmt=fmt, filename=f"{stem}.{fmt}") for fmt in formats]
+            export_targets = [
+                ExportTarget(
+                    kind=kind,
+                    fmt=fmt,
+                    filename=f"{stem}{'_filtered' if kind == 'filtered' else ''}.{fmt}",
+                )
+                for kind, fmt in target_specs
+            ]
             try:
                 exported = await asyncio.to_thread(
                     self.state.offline.export,
                     session_id=session_id,
                     base_name_raw=stem,
-                    targets=targets,
-                    bandpass=None,
+                    base_name_filtered=f"{stem}_filtered",
+                    targets=export_targets,
+                    bandpass=bp_config,
                     output_dir=str(folder),
                 )
                 outputs.extend([{**item, "index": number} for item in exported.get("outputs", [])])
@@ -140,7 +173,12 @@ class MusicService:
             "missing_indexes": missing,
             "outputs": outputs,
             "errors": errors,
-            "formats": formats,
+            "targets": [{"kind": kind, "fmt": fmt} for kind, fmt in target_specs],
+            "bandpass": {
+                "enabled": bp_enabled,
+                "lowcut_hz": lowcut_hz,
+                "highcut_hz": highcut_hz,
+            },
         }
 
     @staticmethod

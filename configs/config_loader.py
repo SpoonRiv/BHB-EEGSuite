@@ -968,7 +968,7 @@ def load_config(config_path: str) -> AppConfig:
         if channel_name not in channel_name_set:
             raise ValueError(f"signal.psd.quality.bad_channels 包含未知通道: {channel_name}")
         quality_bad_channels.append(channel_name)
-    quality_lowcut_hz = float(quality_raw.get("lowcut_hz", 0.5))
+    quality_lowcut_hz = float(quality_raw.get("lowcut_hz", 1.0))
     quality_highcut_hz = float(quality_raw.get("highcut_hz", 45.0))
     quality_filter_order = int(quality_raw.get("filter_order", 4))
     quality_window_sec = float(quality_raw.get("window_sec", 0.5))

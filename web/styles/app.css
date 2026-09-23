@@ -3492,7 +3492,7 @@ select option {
   z-index: 30;
   top: -7px;
   right: -7px;
-  width: 280px;
+  width: 300px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 120px);
   overflow-y: auto;
@@ -3600,7 +3600,7 @@ select option {
 .eeg-settings-row input[type="range"] {
   flex: 1;
   min-width: 0;
-  height: 26px;
+  height: 28px;
   margin: 0;
   background: transparent;
   -webkit-appearance: none;
@@ -3609,36 +3609,58 @@ select option {
 }
 
 .eeg-settings-row input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(120, 170, 210, 0.16);
+  background: rgba(0, 0, 0, 0.10);
 }
 
 .eeg-settings-row input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -4px;
-  border: none;
+  width: 34px;
+  height: 16px;
+  margin-top: -5px;
   border-radius: 999px;
-  background: rgb(var(--accent-rgb));
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+  border: 1px solid rgba(120, 170, 210, 0.34);
+  background: rgba(236, 242, 255, 0.92);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.10),
+    0 0 18px rgba(49, 215, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  cursor: ew-resize;
   transition: box-shadow 120ms ease;
 }
 
+.eeg-settings-row input[type="range"]:active::-webkit-slider-thumb,
+.eeg-settings-row input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.30),
+    0 0 0 2px rgba(49, 215, 255, 0.28),
+    0 0 22px rgba(49, 215, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.80),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10);
+}
+
 .eeg-settings-row input[type="range"]::-moz-range-track {
-  height: 4px;
+  height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(120, 170, 210, 0.16);
+  background: rgba(0, 0, 0, 0.10);
 }
 
 .eeg-settings-row input[type="range"]::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: none;
+  width: 34px;
+  height: 16px;
   border-radius: 999px;
-  background: rgb(var(--accent-rgb));
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+  border: 1px solid rgba(120, 170, 210, 0.34);
+  background: rgba(236, 242, 255, 0.92);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.10),
+    0 0 18px rgba(49, 215, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  cursor: ew-resize;
 }
 
 .eeg-settings-row input[type="range"]:disabled {
@@ -3665,27 +3687,10 @@ select option {
 
 .eeg-settings-apply-btn {
   width: 100%;
-  height: 30px;
+  min-height: 28px;
   margin-top: 8px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: rgb(var(--accent-rgb));
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  letter-spacing: 0.4px;
-  cursor: pointer;
-  transition: filter 120ms ease, transform 120ms ease;
-}
-
-.eeg-settings-apply-btn:hover {
-  filter: brightness(1.12);
-}
-
-.eeg-settings-apply-btn:active {
-  transform: translateY(1px);
+  border-color: rgba(var(--accent-rgb), 0.28);
+  font-size: 11px;
 }
 
 .btn.eeg-settings-toggle-btn {
@@ -3712,10 +3717,6 @@ select option {
 }
 
 /* ===== PSD (frequency-domain) settings popover extras ===== */
-.eeg-psd-settings-popover {
-  width: 300px;
-}
-
 .eeg-settings-hint {
   margin-bottom: 6px;
   font-size: 11px;
@@ -4002,15 +4003,33 @@ select option {
 }
 
 [data-theme="light"] .eeg-settings-row input[type="range"]::-webkit-slider-runnable-track {
-  background: rgba(17, 24, 39, 0.14);
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 [data-theme="light"] .eeg-settings-row input[type="range"]::-moz-range-track {
-  background: rgba(17, 24, 39, 0.14);
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(0, 0, 0, 0.05);
 }
 
-[data-theme="light"] .eeg-settings-apply-btn {
-  background: var(--accent-text, rgb(var(--accent-rgb)));
+[data-theme="light"] .eeg-settings-row input[type="range"]::-webkit-slider-thumb {
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 0 18px rgba(49, 215, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="light"] .eeg-settings-row input[type="range"]::-moz-range-thumb {
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 0 18px rgba(49, 215, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 [data-theme="light"] .btn.eeg-settings-toggle-btn:hover {

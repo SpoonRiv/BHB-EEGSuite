@@ -12,7 +12,6 @@ function renderCatalog() {
   const installing = changing === 'install';
   const uninstalling = changing === 'uninstall';
   $('module-installed-state').textContent = actionError || (installed ? '已安装' : '未安装');
-  $('module-version').textContent = `v${moduleInfo?.version || '1.0.0'}`;
   $('module-install').hidden = installed;
   $('module-install').disabled = changing || !moduleInfo?.available;
   $('module-install').classList.toggle('module-action--busy', installing);
@@ -82,7 +81,7 @@ async function loadPages() {
       template.innerHTML = await readAsset('pages.html');
       document.querySelector('.app-body').append(template.content);
     }
-    moduleScript = await import(assetRoot + `music.js?v=${encodeURIComponent(moduleInfo.version)}`);
+    moduleScript = await import(assetRoot + 'music.js');
   })().finally(() => { loading = null; });
   return loading;
 }

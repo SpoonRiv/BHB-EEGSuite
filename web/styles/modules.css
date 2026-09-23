@@ -47,7 +47,7 @@
   box-shadow: inset 0 1px 0 #fff;
 }
 .module-manager { width: min(720px, calc(100vw - 36px)); max-width: 720px; }
-.music-mode-hero { background: radial-gradient(ellipse at center, #352167, #0a1220); }
+.music-mode-hero { background: radial-gradient(ellipse at center, #123a5c, #0a1220); }
 .mode-card--uninstalled .music-mode-hero { filter: grayscale(1); }
 .mode-card--uninstalled .mode-card__arrow { visibility: hidden; }
 .module-action--busy::before { content: ""; width: 14px; height: 14px; box-sizing: border-box; border: 2px solid rgba(255, 255, 255, .35); border-top-color: currentColor; border-radius: 50%; animation: module-install-spin .8s linear infinite; }

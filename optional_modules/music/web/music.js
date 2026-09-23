@@ -106,7 +106,7 @@ function setControls() {
   const busy = !!run;
   $('music-start').disabled = busy || !deviceReady || deviceBusy || !selected.size || libraryLoading;
   $('music-stop').disabled = !busy || !!run?.stopPromise;
-  for (const id of ['music-all', 'music-none', 'music-refresh', 'music-subject', 'music-volume', 'music-fullscreen']) $(id).disabled = busy || libraryLoading;
+  for (const id of ['music-all', 'music-none', 'music-subject', 'music-volume', 'music-fullscreen']) $(id).disabled = busy || libraryLoading;
   document.querySelectorAll('.music-song').forEach(el => { el.disabled = busy; });
   $('music-selection').textContent = `已选 ${selected.size} / ${songs.length} 首`;
   if ($('music-saved-count')) $('music-saved-count').textContent = `已保存 ${results.length} 首`;
@@ -379,7 +379,6 @@ function bind() {
   $('music-stage-stop').onclick = () => stopExperiment();
   $('music-all').onclick = () => { if (!run) { selected = new Set(songs.map(s => s.id)); renderSongs(); } };
   $('music-none').onclick = () => { if (!run) { selected.clear(); renderSongs(); } };
-  $('music-refresh').onclick = loadLibrary;
   $('music-debug-clear').onclick = () => { debugLines = []; debugBufferedLines = []; renderDebug(); };
   $('music-debug-pause').onclick = () => {
     debugPaused = !debugPaused;
@@ -455,17 +454,31 @@ function setExportDir(path, visible = Boolean(path)) {
   }
 }
 
-function selectedExportFormats() {
-  const formats = [];
-  if ($('music-export-csv')?.checked) formats.push('csv');
-  if ($('music-export-edf')?.checked) formats.push('edf');
-  return formats;
+function selectedExportTargets() {
+  const targets = [];
+  if ($('music-raw-csv')?.checked) targets.push({kind: 'raw', fmt: 'csv'});
+  if ($('music-raw-edf')?.checked) targets.push({kind: 'raw', fmt: 'edf'});
+  const filterEnabled = !!$('music-filter-enable')?.checked;
+  if (filterEnabled && $('music-fil-csv')?.checked) targets.push({kind: 'filtered', fmt: 'csv'});
+  if (filterEnabled && $('music-fil-edf')?.checked) targets.push({kind: 'filtered', fmt: 'edf'});
+  return targets;
 }
 
 function renderExportFormat() {
-  const formats = selectedExportFormats();
+  const targets = selectedExportTargets();
+  const labels = targets.map(target => `${target.kind === 'filtered' ? '滤波 ' : ''}${target.fmt.toUpperCase()}`);
   const metric = $('music-export-format');
-  if (metric) metric.textContent = formats.length ? formats.map(format => format.toUpperCase()).join(' + ') : '未选择';
+  if (metric) metric.textContent = labels.length ? labels.join(' + ') : '未选择';
+}
+
+function setMusicFilterVisible(enabled) {
+  const blocks = [$('music-filter-block'), $('music-filtered-block')];
+  for (const block of blocks) {
+    if (!block) continue;
+    block.setAttribute('aria-disabled', String(!enabled));
+    block.querySelectorAll('input').forEach(input => { input.disabled = !enabled; });
+  }
+  $('music-filter-enable')?.setAttribute('aria-expanded', String(enabled));
 }
 
 function renderExportResults() {
@@ -476,21 +489,28 @@ function renderExportResults() {
   if (count) count.textContent = `${exportResults.length} 个`;
   if (!exportResults.length) {
     const empty = document.createElement('div');
-    empty.className = 'music-export-empty-note offline-filter-idle';
-    empty.textContent = '暂无已保存的文本-音频会话。完成一次实验后，数据会自动显示在这里。';
+    empty.className = 'music-export-empty-note offline-filter-hint';
+    empty.textContent = '暂无已保存项目';
     root.append(empty);
     return;
   }
   exportResults.forEach((result, index) => {
     const item = document.createElement('article');
     item.className = 'music-export-item';
-    const main = document.createElement('div'); main.className = 'music-export-item-main';
-    const title = document.createElement('strong'); title.textContent = `${index + 1}. ${result.song.name}`;
-    const detail = document.createElement('div'); detail.className = 'music-muted';
-    detail.textContent = `${result.session.total_samples || 0} 点 · ${result.session.channel_names?.length || '--'} 通道 · ${result.session.session_id}`;
-    const path = document.createElement('div'); path.className = 'music-export-item-path'; path.textContent = result.session.session_dir || '--'; path.title = result.session.session_dir || '';
-    main.append(title, detail, path);
-    const badge = document.createElement('span'); badge.className = 'music-export-item-index'; badge.textContent = String(index + 1).padStart(2, '0');
+    item.title = `${result.song.name} · ${result.session.session_id}`;
+    const badge = document.createElement('span');
+    badge.className = 'music-export-item-index';
+    badge.textContent = String(index + 1).padStart(2, '0');
+    const main = document.createElement('div');
+    main.className = 'music-export-item-main';
+    const title = document.createElement('strong');
+    title.textContent = result.song.name;
+    const detail = document.createElement('div');
+    detail.className = 'music-export-item-detail';
+    detail.textContent = `${result.session.total_samples || 0} 点 · ${result.session.channel_names?.length || '--'} 通道`;
+    const session = result.session.session_id || '';
+    item.title = `${result.song.name} · ${session}`;
+    main.append(title, detail);
     item.append(badge, main);
     root.append(item);
   });
@@ -502,21 +522,43 @@ async function exportAll() {
     exportStatus('暂无可导出的文本-音频实验会话', 'error');
     return;
   }
-  const formats = selectedExportFormats();
-  if (!formats.length) {
-    exportStatus('请至少选择一种导出文件格式', 'error');
+  const targets = selectedExportTargets();
+  if (!targets.length) {
+    exportStatus('请至少选择一种原始或滤波导出格式', 'error');
     return;
   }
+  const filterEnabled = !!$('music-filter-enable')?.checked;
+  const wantsFiltered = targets.some(target => target.kind === 'filtered');
+  if (wantsFiltered && !filterEnabled) {
+    exportStatus('已选择滤波文件，请先启用带通滤波', 'error');
+    return;
+  }
+  const lowcutRaw = $('music-lowcut')?.value;
+  const highcutRaw = $('music-highcut')?.value;
+  const lowcut = Number(lowcutRaw);
+  const highcut = Number(highcutRaw);
+  if (filterEnabled && (!Number.isFinite(lowcut) || !Number.isFinite(highcut) || !(lowcut > 0) || !(highcut > lowcut))) {
+    exportStatus('滤波参数非法：需要满足 0 < 低频截止 < 高频截止', 'error');
+    return;
+  }
+  const bandpass = {enabled: filterEnabled, lowcut_hz: lowcutRaw === '' ? 3 : lowcut, highcut_hz: highcutRaw === '' ? 50 : highcut};
   if (button) button.disabled = true;
-  exportStatus(`正在导出 ${exportResults.length} 个项目的 ${formats.map(format => format.toUpperCase()).join(' 和 ')}…`, '');
+  exportStatus(`正在导出 ${exportResults.length} 个项目的 ${targets.length} 种文件…`, '');
   try {
-    const response = await musicExport(formats, exportResults);
+    const response = await musicExport(targets, bandpass, exportResults);
     const outputs = Array.isArray(response?.outputs) ? response.outputs : [];
     const errors = Array.isArray(response?.errors) ? response.errors : [];
     const missing = Array.isArray(response?.missing_indexes) ? response.missing_indexes : [];
     setExportDir(response?.export_dir || '', Boolean(response?.export_dir));
     const files = $('music-export-files');
     if (files) files.textContent = `${outputs.length} 个`;
+    if (Array.isArray(response?.targets)) {
+      $('music-raw-csv').checked = response.targets.some(target => target.kind === 'raw' && target.fmt === 'csv');
+      $('music-raw-edf').checked = response.targets.some(target => target.kind === 'raw' && target.fmt === 'edf');
+      $('music-fil-csv').checked = response.targets.some(target => target.kind === 'filtered' && target.fmt === 'csv');
+      $('music-fil-edf').checked = response.targets.some(target => target.kind === 'filtered' && target.fmt === 'edf');
+      renderExportFormat();
+    }
     const done = exportResults.length - errors.length;
     let text = `导出完成：${Math.max(0, done)} 个项目，${outputs.length} 个文件`;
     if (missing.length) text += `，空置编号 ${missing.join('、')}`;
@@ -538,10 +580,12 @@ async function loadExportResults() {
   } catch (_) {}
   const unique = new Map();
   for (const result of local) if (result?.session?.session_id && result?.song?.name) unique.set(result.session.session_id, result);
-  exportResults = [...unique.values()];
+  exportResults = [...unique.values()].slice(0, 10);
   renderExportResults();
   const button = $('music-export-all-files');
   if (button) button.disabled = exportResults.length === 0;
+  const folders = $('music-export-folders');
+  if (folders) folders.textContent = '10';
   if (!exportResults.length) setExportDir('', false);
   exportStatus(exportResults.length ? `已读取 ${exportResults.length} 个已完成项目，默认全部导出` : '暂无已保存的文本-音频会话', exportResults.length ? 'success' : 'error');
 }
@@ -549,11 +593,17 @@ async function loadExportResults() {
 function bindExportPage() {
   if (exportPageBound) return;
   exportPageBound = true;
-  $('music-export-back').onclick = () => navigate('#music');
   $('music-export-mode').onclick = () => navigate('#mode');
   $('music-export-all-files').onclick = exportAll;
-  $('music-export-csv').onchange = renderExportFormat;
-  $('music-export-edf').onchange = renderExportFormat;
+  ['music-raw-csv', 'music-raw-edf', 'music-fil-csv', 'music-fil-edf'].forEach(id => {
+    $(id).onchange = renderExportFormat;
+  });
+  $('music-filter-enable').onchange = () => {
+    setMusicFilterVisible($('music-filter-enable').checked);
+    renderExportFormat();
+  };
+  ['music-lowcut', 'music-highcut'].forEach(id => { $(id).onchange = renderExportFormat; });
+  setMusicFilterVisible(false);
   $('music-export-open-folder').onclick = async () => {
     const button = $('music-export-open-folder');
     button.disabled = true;

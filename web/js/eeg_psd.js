@@ -67,13 +67,13 @@ function formatHz(value) {
 function formatPower(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return '--';
-  if (n >= 10000) return n.toExponential(2);
+  if (n >= 10000) return n.toExponential(1);
   if (n >= 100) return n.toFixed(1);
   if (n >= 1) return n.toFixed(2);
   return n.toFixed(3);
 }
 
-function formatScientific(value, precision = 2) {
+function formatScientific(value, precision = 1) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '--';
   return n.toExponential(precision);

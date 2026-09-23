@@ -291,7 +291,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                 <div class="mode-desc">运动想象：用于任务范式、训练流程与在线分类/反馈闭环（预留）。</div>
                             </div>
                         </button>
-                        <button type="button" class="mode-card mode-card--bottom mode-card--uninstalled" id="mode-music" data-tone="violet" aria-label="打开文本-音频多模态范式模块管理">
+                        <button type="button" class="mode-card mode-card--bottom mode-card--uninstalled" id="mode-music" data-tone="cyan" aria-label="打开文本-音频多模态范式模块管理">
                             <div class="mode-hero-wrap music-mode-hero">
                                 <div class="mode-card__hud" aria-hidden="true">
                                     <span class="mode-card__index">06</span>
@@ -340,7 +340,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                 <span id="eeg-focus-label">隐藏调试</span>
                             </button>
                             <button class="btn btn--primary" id="btn-eeg-start">开始EEG采集</button>
-                            <button class="btn btn--danger" id="btn-eeg-stop">停止EEG采集</button>
+                            <button class="btn btn--danger" id="btn-eeg-stop">停止并导出</button>
                         </div>
                     </div>
                     <div class="card-body eeg-debug-body" id="eeg-debug-body" style="flex: 1; min-height: 0;">
@@ -473,9 +473,11 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <div class="offline-section-sub">导出已包含 50Hz 工频陷波的原始会话数据</div>
                                 </div>
                                 <div class="stack offline-form-stack">
-                                    <div class="field">
-                                        <div class="label">原始文件名（不含扩展名）</div>
-                                        <input id="offline-base-raw" placeholder="例如：subject01_run1" />
+                                    <div class="offline-filter-setup-row offline-filter-raw-name-row">
+                                        <div class="field">
+                                            <div class="label">原始文件名（不含扩展名）</div>
+                                            <input id="offline-base-raw" placeholder="例如：subject01_run1" />
+                                        </div>
                                     </div>
                                     <div class="field">
                                         <div class="label">文件格式</div>
@@ -496,6 +498,20 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                             </label>
                                         </div>
                                     </div>
+                                    <div class="offline-illust-zone" aria-hidden="true">
+                                        <svg class="offline-illust" viewBox="0 0 300 88">
+                                            <path class="ill-base" d="M10 44 C 30 8, 50 80, 70 44 C 90 8, 110 80, 130 44" />
+                                            <path class="ill-flow" d="M10 44 C 30 8, 50 80, 70 44 C 90 8, 110 80, 130 44" />
+                                            <path class="ill-arrow" d="M142 44 h 16" />
+                                            <path class="ill-arrow-head" d="M152 38 l 8 6 -8 6" />
+                                            <g class="ill-file">
+                                                <rect x="178" y="20" width="70" height="48" rx="11" />
+                                                <path class="ill-file-fold" d="M232 20 h 8 a 8 8 0 0 1 8 8 v 8" />
+                                            </g>
+                                            <text class="ill-text" x="213" y="42">CSV · EDF</text>
+                                            <text class="ill-text ill-text--sm" x="70" y="14">50Hz 工频陷波已包含</text>
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
 
@@ -504,58 +520,67 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <div class="offline-section-title">滤波导出</div>
                                     <div class="offline-section-sub">按带通参数另存一份滤波后数据，便于后续分析</div>
                                     <div class="offline-toggle-row">
-                                        <label class="offline-filter-toggle">
-                                            <span class="offline-filter-toggle__copy">
-                                                <strong>启用带通滤波</strong>
-                                                <small>设置截止频率并生成一份滤波副本</small>
-                                            </span>
+                                        <label class="offline-filter-switch" for="offline-filter-enable">启用带通滤波</label>
+                                        <label class="ios-switch">
                                             <input type="checkbox" id="offline-filter-enable" aria-controls="offline-filter-block offline-filtered-block" />
+                                            <span class="ios-slider"></span>
                                         </label>
                                     </div>
                                 </div>
                                 <div class="stack offline-form-stack">
-                                    <div class="offline-filter-idle" id="offline-filter-idle">
-                                        开启带通滤波后，可设置低频与高频截止参数。
-                                    </div>
-                                    <div id="offline-filter-block" style="display: none;">
-                                        <div class="offline-filter-grid">
+                                    <div id="offline-filter-block" class="offline-filter-controls" aria-disabled="true">
+                                        <div class="offline-filter-setup-row">
                                             <div class="field">
-                                                <div class="label">低频截止（Hz）</div>
-                                                <input id="offline-lowcut" type="number" min="0" step="0.1" />
+                                                <div class="label">滤波后文件名（不含扩展名）</div>
+                                                <input id="offline-base-filtered" placeholder="例如：subject01_run1_filtered" disabled />
                                             </div>
-                                            <div class="field">
-                                                <div class="label">高频截止（Hz）</div>
-                                                <input id="offline-highcut" type="number" min="0" step="0.1" />
+                                            <div class="offline-filter-grid">
+                                                <div class="field">
+                                                    <div class="label">低频截止（Hz）</div>
+                                                    <input id="offline-lowcut" type="number" min="0" step="0.1" disabled />
+                                                </div>
+                                                <div class="field">
+                                                    <div class="label">高频截止（Hz）</div>
+                                                    <input id="offline-highcut" type="number" min="0" step="0.1" disabled />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div id="offline-filtered-block" style="display: none;">
-                                        <div class="stack offline-form-stack">
-                                            <div class="field">
-                                                <div class="label">滤波后文件名（不含扩展名）</div>
-                                                <input id="offline-base-filtered" placeholder="例如：subject01_run1_filtered" />
-                                            </div>
-                                            <div class="field">
-                                                <div class="label">文件格式</div>
-                                                <div class="offline-format-grid">
-                                                    <label class="offline-format-option">
-                                                        <input type="checkbox" id="offline-fil-csv" />
-                                                        <span class="offline-format-copy">
-                                                            <strong>CSV</strong>
-                                                            <small>适合脚本与表格分析</small>
-                                                        </span>
-                                                    </label>
-                                                    <label class="offline-format-option">
-                                                        <input type="checkbox" id="offline-fil-edf" />
-                                                        <span class="offline-format-copy">
-                                                            <strong>EDF</strong>
-                                                            <small>适合脑电分析软件</small>
-                                                        </span>
-                                                    </label>
-                                                </div>
+                                    <div id="offline-filtered-block" class="offline-filter-controls offline-filter-format-block" aria-disabled="true">
+                                        <div class="field">
+                                            <div class="label">文件格式</div>
+                                            <div class="offline-format-grid">
+                                                <label class="offline-format-option">
+                                                    <input type="checkbox" id="offline-fil-csv" disabled />
+                                                    <span class="offline-format-copy">
+                                                        <strong>CSV</strong>
+                                                        <small>适合脚本与表格分析</small>
+                                                    </span>
+                                                </label>
+                                                <label class="offline-format-option">
+                                                    <input type="checkbox" id="offline-fil-edf" disabled />
+                                                    <span class="offline-format-copy">
+                                                        <strong>EDF</strong>
+                                                        <small>适合脑电分析软件</small>
+                                                    </span>
+                                                </label>
                                             </div>
                                         </div>
+                                    </div>
+                                    <div class="offline-illust-zone" aria-hidden="true">
+                                        <svg class="offline-illust offline-illust--bp" viewBox="0 0 300 88">
+                                            <path class="ill-base" d="M10 44 l 7 -18 7 32 7 -24 7 12 7 -22 7 20 7 -6 7 10 7 -14 7 10" />
+                                            <path class="ill-flow ill-flow--fast" d="M10 44 l 7 -18 7 32 7 -24 7 12 7 -22 7 20 7 -6 7 10 7 -14 7 10" />
+                                            <path class="ill-arrow" d="M112 44 h 12" />
+                                            <path class="ill-arrow-head" d="M120 39 l 6 5 -6 5" />
+                                            <rect class="ill-box" x="128" y="18" width="56" height="52" rx="13" />
+                                            <path class="ill-bell" d="M136 58 C 146 58, 150 30, 156 30 C 162 30, 166 58, 176 58" />
+                                            <path class="ill-arrow" d="M198 44 h 12" />
+                                            <path class="ill-arrow-head" d="M206 39 l 6 5 -6 5" />
+                                            <path class="ill-base" d="M222 44 C 234 22, 246 22, 258 44 C 270 66, 282 66, 294 44" />
+                                            <path class="ill-flow ill-flow--slow" d="M222 44 C 234 22, 246 22, 258 44 C 270 66, 282 66, 294 44" />
+                                        </svg>
                                     </div>
                                 </div>
                             </div>
@@ -757,7 +782,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
             <div class="module-catalog-copy">
                 <strong>文本-音频多模态范式</strong>
                 <p>文本与音频同步呈现、脑电采集、实验事件记录与批量导出。</p>
-                <div class="module-catalog-meta"><span id="module-version">v1.0.0</span><span id="module-installed-state">未安装</span></div>
+                <div class="module-catalog-meta"><span id="module-installed-state">未安装</span></div>
             </div>
             <div class="module-catalog-actions">
                 <button class="btn btn--primary" id="module-install" type="button" disabled>安装</button>

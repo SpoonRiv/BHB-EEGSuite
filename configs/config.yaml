@@ -1,5 +1,5 @@
 app:
-  ui_version: "3.5.4"
+  ui_version: "3.5.5"
 
 ui:
   waveform:
@@ -275,7 +275,7 @@ signal:
       automatic_enabled: true
       manual_enabled: true
       bad_channels: []
-      lowcut_hz: 0.5
+      lowcut_hz: 1.0
       highcut_hz: 45.0
       filter_order: 4
       window_sec: 0.5

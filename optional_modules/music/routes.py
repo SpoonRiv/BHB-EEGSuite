@@ -37,8 +37,20 @@ class StopRequest(TimedRequest):
     reason: Literal["completed", "stopped", "escape", "page_left", "playback_error", "request_error"] = "stopped"
 
 
+class ExportTargetRequest(BaseModel):
+    kind: Literal["raw", "filtered"]
+    fmt: Literal["csv", "edf"]
+
+
+class ExportBandpassRequest(BaseModel):
+    enabled: bool = False
+    lowcut_hz: float = Field(default=3.0, gt=0, allow_inf_nan=False)
+    highcut_hz: float = Field(default=50.0, gt=0, allow_inf_nan=False)
+
+
 class ExportRequest(BaseModel):
-    formats: List[Literal["csv", "edf"]] = Field(default_factory=lambda: ["csv", "edf"], min_length=1, max_length=2)
+    targets: List[ExportTargetRequest] = Field(min_length=1, max_length=4)
+    bandpass: ExportBandpassRequest = Field(default_factory=ExportBandpassRequest)
     results: List[Dict[str, Any]] = Field(default_factory=list, max_length=10)
 
 
@@ -75,7 +87,13 @@ def create_music_router(service):
 
     @router.post("/export")
     async def export(req: ExportRequest):
-        return await invoke(service.export_all(req.formats, req.results))
+        return await invoke(
+            service.export_all(
+                [target.model_dump() for target in req.targets],
+                req.bandpass.model_dump(),
+                req.results,
+            )
+        )
 
     @router.post("/open-export-folder")
     async def open_export_folder():

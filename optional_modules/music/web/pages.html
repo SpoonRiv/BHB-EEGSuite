@@ -34,7 +34,7 @@
                         <div class="music-columns">
                             <div class="tdcs-subcard music-library-panel">
                                 <div class="music-section-head"><div><div class="tdcs-section-title">实验曲库</div><span id="music-selection" class="music-muted">已选 0 首</span></div>
-                                    <div class="row"><button class="btn btn--ghost" id="music-all">全选</button><button class="btn btn--ghost" id="music-none">全不选</button><button class="btn btn--ghost" id="music-refresh">刷新</button></div>
+                                    <div class="row"><button class="btn btn--ghost" id="music-all">全选</button><button class="btn btn--ghost" id="music-none">全不选</button></div>
                                 </div>
                                 <div class="music-song-grid" id="music-songs"></div>
                             </div>
@@ -58,15 +58,14 @@
                 </div>
             </div>
         </section>
-        <section class="page" id="page-music-export" data-page-title="文本-音频数据导出" data-page-desc="查看文本-音频多模态范式会话并导出 CSV 或 EDF 文件">
+        <section class="page" id="page-music-export" data-page-title="数据存储" data-page-desc="按项目导出文本-音频范式的原始或滤波脑电数据文件">
             <div class="card offline-card music-export-card">
                 <div class="card-header" data-kicker="TEXT-AUDIO DATA ARCHIVE">
                     <div>
-                        <div class="card-title">文本-音频数据导出</div>
-                        <div class="card-sub">结束实验后，所有已完成项目默认一次性导出到同一目录</div>
+                        <div class="card-title">数据存储</div>
+                        <div class="card-sub">原始或带通滤波数据均可导出 CSV/EDF，项目列表按实验顺序排列</div>
                     </div>
                     <div class="row">
-                        <button class="btn btn--ghost" id="music-export-back" type="button">返回文本-音频范式</button>
                         <button class="btn btn--ghost" id="music-export-mode" type="button">返回模式</button>
                         <button class="btn btn--primary" id="music-export-all-files" type="button">导出文件</button>
                     </div>
@@ -77,14 +76,14 @@
                             <div class="offline-session-panel">
                                 <div class="offline-section-head">
                                     <div class="offline-section-title">会话概览</div>
-                                    <div class="offline-section-sub">全部已完成文本-音频项目将按实验顺序写入 1-10 编号文件夹</div>
+                                    <div class="offline-section-sub">全部已完成项目按实验顺序排列，最多显示 10 项</div>
                                 </div>
-                                <div class="offline-session-grid">
+                                <div class="offline-session-grid music-export-session-grid">
                                     <div class="field">
                                         <div class="label">导出状态</div>
                                         <div class="status-box error" id="music-export-status" role="status" aria-live="polite">状态：正在读取已保存会话…</div>
                                     </div>
-                                    <div class="field">
+                                    <div class="field offline-session-grid__dir">
                                         <div class="label">共同导出目录</div>
                                         <div class="status-box offline-session-dir-control">
                                             <span id="music-export-dir">--</span>
@@ -92,6 +91,7 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="music-export-list" id="music-export-list" aria-label="全部已完成项目"></div>
                                 <div class="offline-metrics-grid" aria-label="文本-音频导出概况">
                                     <div class="offline-metric">
                                         <span class="offline-metric__label">已完成项目</span>
@@ -114,32 +114,95 @@
 
                             <div class="offline-panel offline-panel--raw music-export-panel">
                                 <div class="offline-section-head" data-step="01">
-                                    <div class="offline-section-title">全部项目</div>
-                                    <div class="offline-section-sub">按实验顺序确认每个项目对应的会话和编号</div>
-                                </div>
-                                <div class="music-export-list" id="music-export-list"></div>
-                            </div>
-
-                            <div class="offline-panel music-export-panel">
-                                <div class="offline-section-head" data-step="02">
-                                    <div class="offline-section-title">导出内容</div>
-                                    <div class="offline-section-sub">一次操作生成全部已完成项目的原始数据文件</div>
+                                    <div class="offline-section-title">原始导出</div>
+                                    <div class="offline-section-sub">导出全部已完成项目的原始脑电数据</div>
                                 </div>
                                 <div class="stack offline-form-stack music-export-summary">
+                                    <div class="offline-filter-raw-meta" aria-hidden="true"></div>
                                     <div class="field">
                                         <div class="label">文件格式</div>
                                         <div class="offline-format-grid">
                                             <label class="offline-format-option">
-                                                <input id="music-export-csv" type="checkbox" checked />
+                                                <input id="music-raw-csv" type="checkbox" checked />
                                                 <span class="offline-format-copy"><strong>CSV</strong><small>适合脚本与表格分析</small></span>
                                             </label>
                                             <label class="offline-format-option">
-                                                <input id="music-export-edf" type="checkbox" />
+                                                <input id="music-raw-edf" type="checkbox" />
                                                 <span class="offline-format-copy"><strong>EDF</strong><small>适合脑电分析软件</small></span>
                                             </label>
                                         </div>
                                     </div>
-                                    <div class="offline-filter-idle music-export-empty-note" id="music-export-note">完成项目会自动全部纳入导出，无需逐项选择。</div>
+                                    <div class="offline-illust-zone" aria-hidden="true">
+                                        <svg class="offline-illust" viewBox="0 0 300 88">
+                                            <path class="ill-base" d="M10 44 C 30 8, 50 80, 70 44 C 90 8, 110 80, 130 44" />
+                                            <path class="ill-flow" d="M10 44 C 30 8, 50 80, 70 44 C 90 8, 110 80, 130 44" />
+                                            <path class="ill-arrow" d="M142 44 h 16" />
+                                            <path class="ill-arrow-head" d="M152 38 l 8 6 -8 6" />
+                                            <g class="ill-file">
+                                                <rect x="178" y="20" width="70" height="48" rx="11" />
+                                                <path class="ill-file-fold" d="M232 20 h 8 a 8 8 0 0 1 8 8 v 8" />
+                                            </g>
+                                            <text class="ill-text" x="213" y="42">CSV · EDF</text>
+                                            <text class="ill-text ill-text--sm" x="70" y="14">全部已完成项目</text>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="offline-panel offline-panel--filtered music-export-panel">
+                                <div class="offline-section-head" data-step="02">
+                                    <div class="offline-section-title">滤波导出</div>
+                                    <div class="offline-section-sub">按带通参数生成全部项目的滤波副本</div>
+                                    <div class="offline-toggle-row">
+                                        <label class="offline-filter-switch" for="music-filter-enable">启用带通滤波</label>
+                                        <label class="ios-switch">
+                                            <input id="music-filter-enable" type="checkbox" aria-controls="music-filter-block music-filtered-block" />
+                                            <span class="ios-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="stack offline-form-stack">
+                                    <div id="music-filter-block" class="offline-filter-controls" aria-disabled="true">
+                                        <div class="offline-filter-grid music-filter-setup-grid">
+                                            <div class="field">
+                                                <div class="label">低频截止（Hz）</div>
+                                                <input id="music-lowcut" type="number" min="0.1" step="0.1" value="3" disabled />
+                                            </div>
+                                            <div class="field">
+                                                <div class="label">高频截止（Hz）</div>
+                                                <input id="music-highcut" type="number" min="0.1" step="0.1" value="50" disabled />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="music-filtered-block" class="offline-filter-controls offline-filter-format-block" aria-disabled="true">
+                                        <div class="field">
+                                            <div class="label">文件格式</div>
+                                            <div class="offline-format-grid">
+                                                <label class="offline-format-option">
+                                                    <input id="music-fil-csv" type="checkbox" disabled />
+                                                    <span class="offline-format-copy"><strong>CSV</strong><small>适合脚本与表格分析</small></span>
+                                                </label>
+                                                <label class="offline-format-option">
+                                                    <input id="music-fil-edf" type="checkbox" disabled />
+                                                    <span class="offline-format-copy"><strong>EDF</strong><small>适合脑电分析软件</small></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="offline-illust-zone" aria-hidden="true">
+                                        <svg class="offline-illust offline-illust--bp" viewBox="0 0 300 88">
+                                            <path class="ill-base" d="M10 44 l 7 -18 7 32 7 -24 7 12 7 -22 7 20 7 -6 7 10 7 -14 7 10" />
+                                            <path class="ill-flow ill-flow--fast" d="M10 44 l 7 -18 7 32 7 -24 7 12 7 -22 7 20 7 -6 7 10 7 -14 7 10" />
+                                            <path class="ill-arrow" d="M112 44 h 12" />
+                                            <path class="ill-arrow-head" d="M120 39 l 6 5 -6 5" />
+                                            <rect class="ill-box" x="128" y="18" width="56" height="52" rx="13" />
+                                            <path class="ill-bell" d="M136 58 C 146 58, 150 30, 156 30 C 162 30, 166 58, 176 58" />
+                                            <path class="ill-arrow" d="M198 44 h 12" />
+                                            <path class="ill-arrow-head" d="M206 39 l 6 5 -6 5" />
+                                            <path class="ill-base" d="M222 44 C 234 22, 246 22, 258 44 C 270 66, 282 66, 294 44" />
+                                            <path class="ill-flow ill-flow--slow" d="M222 44 C 234 22, 246 22, 258 44 C 270 66, 282 66, 294 44" />
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
                         </div>

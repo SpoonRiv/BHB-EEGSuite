@@ -27,7 +27,7 @@ async function musicRequest(path, payload, timeout = 20000) {
 export async function musicLibrary() { return musicRequest('library'); }
 export async function musicLyrics(songId) { return musicRequest(`lyrics/${encodeURIComponent(songId)}`); }
 export async function musicResults() { return musicRequest('results'); }
-export async function musicExport(formats = ['csv', 'edf'], results = []) { return musicRequest('export', {formats, results}, 120000); }
+export async function musicExport(targets = [], bandpass = {}, results = []) { return musicRequest('export', {targets, bandpass, results}, 120000); }
 export async function musicOpenExportFolder() { return musicRequest('open-export-folder', {}); }
 export async function musicStart(payload) { return musicRequest('start', payload || {}); }
 export async function musicHeartbeat(token) { return musicRequest('heartbeat', {token}, 5000); }
