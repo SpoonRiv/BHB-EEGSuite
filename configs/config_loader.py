@@ -334,6 +334,11 @@ class WaveformUiConfig:
     y_axis_fixed_max_min: float
     y_axis_fixed_max_max: float
     y_axis_fixed_max_step: float
+    ppg_y_axis_dynamic_default: bool
+    ppg_y_axis_fixed_max_default: float
+    ppg_y_axis_fixed_max_min: float
+    ppg_y_axis_fixed_max_max: float
+    ppg_y_axis_fixed_max_step: float
 
 
 @dataclass(frozen=True)
@@ -641,6 +646,31 @@ def load_config(config_path: str) -> AppConfig:
         y_axis_fixed_max_default = y_axis_fixed_max_min
     if y_axis_fixed_max_default > y_axis_fixed_max_max:
         y_axis_fixed_max_default = y_axis_fixed_max_max
+
+    ppg_y_axis_dynamic_default = bool(waveform_ui_raw.get("ppg_y_axis_dynamic_default", True))
+    ppg_y_axis_fixed_max_default = float(waveform_ui_raw.get("ppg_y_axis_fixed_max_default", 20000.0))
+    if not (ppg_y_axis_fixed_max_default == ppg_y_axis_fixed_max_default):
+        ppg_y_axis_fixed_max_default = 20000.0
+    ppg_y_axis_fixed_max_min = float(waveform_ui_raw.get("ppg_y_axis_fixed_max_min", 1000.0))
+    if not (ppg_y_axis_fixed_max_min == ppg_y_axis_fixed_max_min):
+        ppg_y_axis_fixed_max_min = 1000.0
+    ppg_y_axis_fixed_max_max = float(waveform_ui_raw.get("ppg_y_axis_fixed_max_max", 200000.0))
+    if not (ppg_y_axis_fixed_max_max == ppg_y_axis_fixed_max_max):
+        ppg_y_axis_fixed_max_max = 200000.0
+    ppg_y_axis_fixed_max_step = float(waveform_ui_raw.get("ppg_y_axis_fixed_max_step", 1000.0))
+    if not (ppg_y_axis_fixed_max_step == ppg_y_axis_fixed_max_step):
+        ppg_y_axis_fixed_max_step = 1000.0
+
+    if ppg_y_axis_fixed_max_step <= 0:
+        ppg_y_axis_fixed_max_step = 1000.0
+    if ppg_y_axis_fixed_max_min <= 0:
+        ppg_y_axis_fixed_max_min = 1000.0
+    if ppg_y_axis_fixed_max_max <= ppg_y_axis_fixed_max_min:
+        ppg_y_axis_fixed_max_max = max(ppg_y_axis_fixed_max_min + ppg_y_axis_fixed_max_step, ppg_y_axis_fixed_max_min + 1.0)
+    if ppg_y_axis_fixed_max_default < ppg_y_axis_fixed_max_min:
+        ppg_y_axis_fixed_max_default = ppg_y_axis_fixed_max_min
+    if ppg_y_axis_fixed_max_default > ppg_y_axis_fixed_max_max:
+        ppg_y_axis_fixed_max_default = ppg_y_axis_fixed_max_max
 
     def _as_u8_list(items: Any) -> List[int]:
         if not isinstance(items, list):
@@ -1205,6 +1235,11 @@ def load_config(config_path: str) -> AppConfig:
             y_axis_fixed_max_min=y_axis_fixed_max_min,
             y_axis_fixed_max_max=y_axis_fixed_max_max,
             y_axis_fixed_max_step=y_axis_fixed_max_step,
+            ppg_y_axis_dynamic_default=ppg_y_axis_dynamic_default,
+            ppg_y_axis_fixed_max_default=ppg_y_axis_fixed_max_default,
+            ppg_y_axis_fixed_max_min=ppg_y_axis_fixed_max_min,
+            ppg_y_axis_fixed_max_max=ppg_y_axis_fixed_max_max,
+            ppg_y_axis_fixed_max_step=ppg_y_axis_fixed_max_step,
         )
     )
 

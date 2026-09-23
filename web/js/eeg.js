@@ -46,6 +46,12 @@ let eegYAxisFixedMaxMax = 1500;
 let eegYAxisFixedMaxStep = 50;
 let eegYAxisModeDirty = false;
 
+let ppgYAxisDynamicEnabled = true;
+let ppgYAxisFixedMax = 20000;
+let ppgYAxisFixedMaxMin = 1000;
+let ppgYAxisFixedMaxMax = 200000;
+let ppgYAxisFixedMaxStep = 1000;
+
 let eegRings = [];
 let eegDataDirty = false;
 let eegRenderLoopActive = false;
@@ -394,6 +400,18 @@ function setFixedYAxisMax(nextMax) {
   eegDataDirty = true;
 }
 
+function setPpgYAxisMode(nextDynamicEnabled) {
+  ppgYAxisDynamicEnabled = !!nextDynamicEnabled;
+  try { localStorage.setItem('bhb_ppg_yaxis_dynamic', ppgYAxisDynamicEnabled ? '1' : '0'); } catch (_) {}
+  if (ppgView) ppgView.setYAxisMode({ dynamic: ppgYAxisDynamicEnabled, fixedMax: ppgYAxisFixedMax });
+}
+
+function setPpgFixedYAxisMax(nextMax) {
+  ppgYAxisFixedMax = clampNumber(nextMax, ppgYAxisFixedMaxMin, ppgYAxisFixedMaxMax, ppgYAxisFixedMax);
+  try { localStorage.setItem('bhb_ppg_yaxis_fixed_max', String(ppgYAxisFixedMax)); } catch (_) {}
+  if (ppgView) ppgView.setYAxisMode({ dynamic: ppgYAxisDynamicEnabled, fixedMax: ppgYAxisFixedMax });
+}
+
 function buildSettingsPopover() {
   const btnWrap = document.getElementById('eeg-settings-btn-wrap');
   const popover = document.getElementById('eeg-settings-popover');
@@ -480,6 +498,68 @@ function buildSettingsPopover() {
     applyYUiState();
   };
 
+  // === Section 1b: PPG 垂直量程（镜像 EEG 调节，仅设备支持 PPG 时显示） ===
+  if (ppgEnabled) {
+    const secPpg = document.createElement('div');
+    secPpg.className = 'eeg-settings-section';
+    const secPpgTitle = document.createElement('div');
+    secPpgTitle.className = 'eeg-settings-section-title';
+    secPpgTitle.textContent = 'PPG 垂直量程（幅值）';
+    secPpg.appendChild(secPpgTitle);
+
+    const rowPSwitch = document.createElement('div');
+    rowPSwitch.className = 'eeg-settings-row';
+    const swLabelP = document.createElement('label');
+    swLabelP.className = 'ios-switch';
+    const ppgDynInput = document.createElement('input');
+    ppgDynInput.type = 'checkbox';
+    ppgDynInput.checked = !!ppgYAxisDynamicEnabled;
+    const swSliderP = document.createElement('span');
+    swSliderP.className = 'ios-slider';
+    swLabelP.appendChild(ppgDynInput);
+    swLabelP.appendChild(swSliderP);
+    const ppgDynText = document.createElement('span');
+    ppgDynText.className = 'eeg-settings-label';
+    ppgDynText.textContent = '自动量程';
+    rowPSwitch.appendChild(ppgDynText);
+    rowPSwitch.appendChild(swLabelP);
+    secPpg.appendChild(rowPSwitch);
+
+    const rowPRange = document.createElement('div');
+    rowPRange.className = 'eeg-settings-row';
+    const ppgRangeLabel = document.createElement('span');
+    ppgRangeLabel.className = 'eeg-settings-label';
+    ppgRangeLabel.textContent = '固定量程';
+    const ppgRangeInput = document.createElement('input');
+    ppgRangeInput.type = 'range';
+    ppgRangeInput.min = String(ppgYAxisFixedMaxMin);
+    ppgRangeInput.max = String(ppgYAxisFixedMaxMax);
+    ppgRangeInput.step = String(ppgYAxisFixedMaxStep);
+    ppgRangeInput.value = String(ppgYAxisFixedMax);
+    ppgRangeInput.disabled = !!ppgYAxisDynamicEnabled;
+    const ppgPill = document.createElement('span');
+    ppgPill.className = 'eeg-settings-pill';
+    ppgPill.textContent = `±${Math.round(Number(ppgYAxisFixedMax) || 0)}`;
+    if (ppgYAxisDynamicEnabled) ppgPill.classList.add('is-dim');
+    rowPRange.appendChild(ppgRangeLabel);
+    rowPRange.appendChild(ppgRangeInput);
+    rowPRange.appendChild(ppgPill);
+    secPpg.appendChild(rowPRange);
+    body.appendChild(secPpg);
+
+    const applyPpgYUiState = () => {
+      ppgRangeInput.disabled = !!ppgYAxisDynamicEnabled;
+      ppgPill.classList.toggle('is-dim', !!ppgYAxisDynamicEnabled);
+      ppgPill.textContent = `±${Math.round(Number(ppgYAxisFixedMax) || 0)}`;
+    };
+    ppgDynInput.onchange = () => { setPpgYAxisMode(ppgDynInput.checked); applyPpgYUiState(); };
+    ppgRangeInput.oninput = () => {
+      setPpgFixedYAxisMax(ppgRangeInput.value);
+      ppgRangeInput.value = String(ppgYAxisFixedMax);
+      applyPpgYUiState();
+    };
+  }
+
   // === Section 2: 水平时基 ===
   const sec2 = document.createElement('div');
   sec2.className = 'eeg-settings-section';
@@ -515,6 +595,8 @@ function buildSettingsPopover() {
       if (!ch) continue;
       try { ch.setOption({ xAxis: { min: -eegWindowSec, max: 0 } }, false, false); } catch (_) {}
     }
+    // PPG 展示窗口与 EEG 时窗联动，去均值窗口也随之同步。
+    if (ppgView) ppgView.setWindowSec(eegWindowSec);
   };
 
   // === Section 3: 带通滤波 ===
@@ -1197,6 +1279,17 @@ export async function enterEegPage() {
     try { storedMax = localStorage.getItem('bhb_eeg_yaxis_fixed_max'); } catch (_) {}
     eegYAxisDynamicEnabled = storedDyn === null ? dynDefault : (String(storedDyn) === '1');
     eegYAxisFixedMax = clampNumber(storedMax === null ? fixedDefault : storedMax, eegYAxisFixedMaxMin, eegYAxisFixedMaxMax, fixedDefault);
+    ppgYAxisFixedMaxMin = uiWave && typeof uiWave.ppg_y_axis_fixed_max_min === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_min) : 1000;
+    ppgYAxisFixedMaxMax = uiWave && typeof uiWave.ppg_y_axis_fixed_max_max === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_max) : 200000;
+    ppgYAxisFixedMaxStep = uiWave && typeof uiWave.ppg_y_axis_fixed_max_step === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_step) : 1000;
+    const ppgDynDefault = uiWave && typeof uiWave.ppg_y_axis_dynamic_default === 'boolean' ? !!uiWave.ppg_y_axis_dynamic_default : true;
+    const ppgFixedDefault = uiWave && typeof uiWave.ppg_y_axis_fixed_max_default === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_default) : 20000;
+    let storedPpgDyn = null;
+    let storedPpgMax = null;
+    try { storedPpgDyn = localStorage.getItem('bhb_ppg_yaxis_dynamic'); } catch (_) {}
+    try { storedPpgMax = localStorage.getItem('bhb_ppg_yaxis_fixed_max'); } catch (_) {}
+    ppgYAxisDynamicEnabled = storedPpgDyn === null ? ppgDynDefault : (String(storedPpgDyn) === '1');
+    ppgYAxisFixedMax = clampNumber(storedPpgMax === null ? ppgFixedDefault : storedPpgMax, ppgYAxisFixedMaxMin, ppgYAxisFixedMaxMax, ppgFixedDefault);
     maxPoints = Math.max(50, Math.floor(Math.max(1, eegSamplingRateHz) * Math.max(0.2, eegWindowSec)));
     eegLastYAxisUpdateAtMs = 0;
     eegPendingMin = Infinity;
@@ -1253,6 +1346,7 @@ export async function enterEegPage() {
   initCharts();
   if (ppgView) ppgView.dispose();
   ppgView = new PpgView({ windowSec: eegWindowSec, enabled: ppgEnabled });
+  ppgView.setYAxisMode({ dynamic: ppgYAxisDynamicEnabled, fixedMax: ppgYAxisFixedMax });
   ppgView.mount(document.getElementById('charts-grid'));
   observeEegChartLayout();
   if (!eegGridScrollHandler) {

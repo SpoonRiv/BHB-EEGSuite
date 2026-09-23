@@ -1,4 +1,5 @@
-/* PPG optical waveforms: raw 24-bit values, separate from EEG processing. */
+/* PPG optical waveforms: raw 24-bit values, separate from EEG processing.
+   绘制前减去当前显示窗口内的逐通道均值（动态计算），突出交流成分。 */
 
 const CHANNELS = [
   { key: 'green', label: '绿光', light: '#087f67', dark: '#6de4b2' },
@@ -6,8 +7,8 @@ const CHANNELS = [
   { key: 'infrared', label: '近红外', light: '#405dc4', dark: '#afbeff' },
 ];
 
-const PPG_ROW_HEIGHT = 140;
-const PPG_PLOT_HEIGHT = 120;
+const PPG_ROW_HEIGHT = 170;
+const PPG_PLOT_HEIGHT = 150;
 
 export class PpgView {
   constructor({ windowSec = 2, enabled = false } = {}) {
@@ -22,6 +23,46 @@ export class PpgView {
     this.disposed = false;
     this.ws = null;
     this.reconnectTimer = null;
+    // Y 轴量程模式：动态（跟随数据自适应）或固定（±fixedMax）。
+    this.yAxisDynamic = true;
+    this.yAxisFixedMax = 20000;
+  }
+
+  /**
+   * 设置 Y 轴量程模式与固定量程值。
+   * @param {{ dynamic: boolean, fixedMax: number }} next 目标状态
+   */
+  setYAxisMode({ dynamic, fixedMax } = {}) {
+    if (typeof dynamic === 'boolean') this.yAxisDynamic = dynamic;
+    const m = Number(fixedMax);
+    if (Number.isFinite(m) && m > 0) this.yAxisFixedMax = m;
+    this._applyYAxisMode();
+  }
+
+  /**
+   * 更新显示窗口时长（秒），同步裁剪已有样本并更新 X 轴范围。
+   * @param {number} nextSec 目标窗口时长
+   */
+  setWindowSec(nextSec) {
+    const v = Math.max(0.2, Number(nextSec) || this.windowSec);
+    if (v === this.windowSec) return;
+    this.windowSec = v;
+    if (this.samples.length) {
+      const cutoff = this.samples[this.samples.length - 1].ts - this.windowSec;
+      this.samples = this.samples.filter(sample => sample.ts >= cutoff).slice(-4096);
+    }
+    if (this.chart) this.chart.setOption({ xAxis: CHANNELS.map(() => ({ min: -this.windowSec, max: 0 })) });
+    this.dirty = true;
+  }
+
+  /** 将当前量程模式写入图表（动态模式下恢复自适应）。 */
+  _applyYAxisMode() {
+    if (!this.chart) return;
+    const patch = this.yAxisDynamic
+      ? { min: null, max: null, scale: true }
+      : { min: -this.yAxisFixedMax, max: this.yAxisFixedMax, scale: false };
+    this.chart.setOption({ yAxis: CHANNELS.map(() => patch) });
+    this.dirty = true;
   }
 
   mount(grid) {
@@ -62,7 +103,10 @@ export class PpgView {
         type: 'value', gridIndex: i, show: false, min: -this.windowSec, max: 0,
       })),
       yAxis: CHANNELS.map((_, i) => ({
-        type: 'value', gridIndex: i, scale: true, splitNumber: 1,
+        type: 'value', gridIndex: i, splitNumber: 1,
+        ...(this.yAxisDynamic
+          ? { min: null, max: null, scale: true }
+          : { min: -this.yAxisFixedMax, max: this.yAxisFixedMax, scale: false }),
         axisLine: { show: false }, axisTick: { show: false },
         axisLabel: {
           fontSize: 10, margin: 10,
@@ -138,10 +182,24 @@ export class PpgView {
     if (!this.dirty || !this.chartEl.getBoundingClientRect().height) return;
     this.dirty = false;
     const latest = this.samples.length ? this.samples[this.samples.length - 1].ts : 0;
+    // 逐通道计算当前窗口内样本的均值（动态），绘制时减去，使波形围绕 0 波动。
+    const sums = { green: 0, red: 0, infrared: 0 };
+    const counts = { green: 0, red: 0, infrared: 0 };
+    for (const sample of this.samples) {
+      for (const { key } of CHANNELS) {
+        const v = Number(sample[key]);
+        if (Number.isFinite(v)) { sums[key] += v; counts[key] += 1; }
+      }
+    }
+    const means = {};
+    for (const { key } of CHANNELS) means[key] = counts[key] ? sums[key] / counts[key] : 0;
     this.chart.setOption({
       series: CHANNELS.map(({ key }) => ({
         showSymbol: this.samples.length === 1,
-        data: this.samples.map(sample => [sample.ts - latest, sample[key] ?? null]),
+        data: this.samples.map(sample => {
+          const v = Number(sample[key]);
+          return [sample.ts - latest, Number.isFinite(v) ? v - means[key] : null];
+        }),
       })),
     });
   }
