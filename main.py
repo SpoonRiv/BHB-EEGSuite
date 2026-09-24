@@ -16,6 +16,7 @@ import logging
 import time
 import socket
 import webbrowser
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -46,6 +47,10 @@ from ws_hub_psd import PsdWsHub, PsdWsHubConfig
 from ws_hub_variance import VarianceWsHub, VarianceWsHubConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+PROJECT_ROOT = (os.path.dirname(os.path.abspath(sys.executable))
+                if getattr(sys, "frozen", False)
+                else os.path.dirname(os.path.abspath(__file__)))
 
 
 class _SuppressGenericWebSocketLifecycleFilter(logging.Filter):
@@ -137,7 +142,7 @@ class NoCacheStaticFiles(StaticFiles):
 
 class AppState:
     def __init__(self):
-        self.config_path = os.path.join(os.path.dirname(__file__), "configs", "config.yaml")
+        self.config_path = os.path.join(PROJECT_ROOT, "configs", "config.yaml")
         self.local_override_path = get_local_override_path(self.config_path)
         self.config = load_config(self.config_path)
         self.controller = EEGController(config_path=self.config_path)
@@ -178,7 +183,7 @@ class AppState:
             resolve_retry_interval_sec=resolve_retry_interval_sec,
         )
         self.offline = OfflineService(
-            project_root_dir=os.path.dirname(__file__),
+            project_root_dir=PROJECT_ROOT,
             root_dir=self.config.offline.root_dir,
             sampling_rate_hz=self.config.eeg.sampling_rate_hz,
             channel_names=self.config.eeg.channel_names,
@@ -743,7 +748,7 @@ class AppState:
         self.config = load_config(self.config_path)
         self.controller.config = self.config
         self.offline = OfflineService(
-            project_root_dir=os.path.dirname(__file__),
+            project_root_dir=PROJECT_ROOT,
             root_dir=self.config.offline.root_dir,
             sampling_rate_hz=self.config.eeg.sampling_rate_hz,
             channel_names=self.config.eeg.channel_names,
@@ -1021,7 +1026,7 @@ async def _music_release():
     return {"status": "success" if stopped else "error", "message": "EEG 停止指令投递失败，请检查设备连接" if not stopped else "EEG 已停止"}
 
 
-music_service = OptionalModuleManager(os.path.dirname(__file__), state, _music_acquire,
+music_service = OptionalModuleManager(PROJECT_ROOT, state, _music_acquire,
                                       _music_release, state.config.module_catalog_url)
 
 
@@ -1144,7 +1149,7 @@ def resolve_offline_session_dir(session_id: str) -> str:
 
     info = state.offline.load_session(sid)
     session_dir = os.path.abspath(str(info.session_dir))
-    offline_root = os.path.abspath(os.path.join(os.path.dirname(__file__), state.config.offline.root_dir))
+    offline_root = os.path.abspath(os.path.join(PROJECT_ROOT, state.config.offline.root_dir))
 
     try:
         if os.path.commonpath([session_dir, offline_root]) != offline_root:
@@ -1285,7 +1290,7 @@ app.add_middleware(
 )
 
 # 挂载前端静态资源
-app.mount("/web", NoCacheStaticFiles(directory="web"), name="web")
+app.mount("/web", NoCacheStaticFiles(directory=os.path.join(PROJECT_ROOT, "web")), name="web")
 app.include_router(create_module_router(music_service))
 app.mount("/api/music", music_service, name="music-module")
 
@@ -2513,7 +2518,7 @@ async def impedance_ws(websocket: WebSocket):
         state.imp_ws_hub.unregister(websocket)
         _log_websocket_closed(websocket, disconnect)
 
-if __name__ == "__main__":
+def run():
     import uvicorn
     host = state.config.server.host
     port = state.config.server.port
@@ -2523,3 +2528,7 @@ if __name__ == "__main__":
         daemon=True,
     ).start()
     uvicorn.run(app, host=host, port=port)
+
+
+if __name__ == "__main__":
+    run()

@@ -6,27 +6,28 @@
 
 ## 1. 快速开始
 
-普通用户请到 GitHub 的 Releases 页面下载 `BHB-EEGSuite-base.zip`，解压后按下方步骤安装依赖。仓库页面的「Code → Download ZIP」是完整源码，其中包含用于构建独立模块包的 `extensions/music/`，不是基础安装包。基础包中不含音乐模块代码和音频，打开模块管理后才会从 Release 下载。
+普通用户请到 GitHub Releases 页面下载 `BHB-EEGSuite-base.zip`，解压到可写目录，双击 `BHB-EEGSuite.exe`。基础包已包含 Python 和运行依赖，无需安装开发环境。首次启动后浏览器会打开 `http://127.0.0.1:8001/`。音乐模块独立放在同一 Release 的 `BHB-EEGSuite-music-V1.zip` 中，可在「模块管理」里按需下载和安装。
 
-### 1.1 环境要求
+### 1.1 运行要求
 
 - Windows 11
-- Python 3.10.20（建议使用 conda）
+- 将 ZIP 完整解压后运行，不要直接在压缩包中双击 exe
+- 目录需可写，以便保存本机配置、模块和实验数据
 
-### 1.2 安装依赖
+### 1.2 从源码开发
 
 ```bash
 conda env create -f environment.yml
 conda activate BHB
 ```
 
-### 1.3 启动
+### 1.3 从源码启动
 
 ```bash
 python main.py
 ```
 
-启动后会自动打开浏览器，访问 `http://127.0.0.1:8001/`。
+开发启动后也会自动打开浏览器。仓库页面的「Code → Download ZIP」包含扩展源码，不是面向普通用户的基础包。
 
 > 端口与监听地址由 `configs/config.yaml -> server.host/server.port` 控制；前端为静态资源，无需单独构建。
 
@@ -83,7 +84,7 @@ python main.py
    taskkill /F /PID <PID>
    ```
 
-3. 重新运行 `python main.py`。
+3. 重新运行 `BHB-EEGSuite.exe`（源码开发环境用 `python main.py`）。
 
 > 若不想结束进程，也可在 `configs/config.local.yaml` 中修改 `server.port` 换端口，再访问 `http://{host}:{新端口}/`。
 
@@ -98,13 +99,13 @@ python main.py
 
 - 先访问 `http://127.0.0.1:8001/api/status` 确认后端正常。
 - 修改过端口则访问地址同步改为 `http://{host}:{port}/`。
-- 首次启动可能被防火墙拦截：允许 Python/uvicorn 本地访问。
+- 首次启动可能被防火墙拦截：允许 `BHB-EEGSuite.exe` 本地访问。
 
 ### 5.4 pylsl 报错 / 无数据
 
 - 先排查蓝牙采集是否正常（调试事件是否有持续输出）。
 - 重启后端，确保无残留进程。
-- 首次运行若缺运行库（VC 运行时），重新安装依赖或改用 Python 3.10/3.11。
+- 若提示缺少 VC 运行库，请安装 Microsoft Visual C++ Redistributable x64。
 
 ### 5.5 导出 CSV/EDF 失败
 
