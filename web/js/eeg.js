@@ -51,6 +51,7 @@ let ppgYAxisFixedMax = 50;
 let ppgYAxisFixedMaxMin = 10;
 let ppgYAxisFixedMaxMax = 2000;
 let ppgYAxisFixedMaxStep = 10;
+let ppgOutlierThreshold = 2000;
 
 let eegRings = [];
 let eegDataDirty = false;
@@ -1306,6 +1307,7 @@ export async function enterEegPage() {
     ppgYAxisFixedMaxMin = uiWave && typeof uiWave.ppg_y_axis_fixed_max_min === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_min) : 10;
     ppgYAxisFixedMaxMax = uiWave && typeof uiWave.ppg_y_axis_fixed_max_max === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_max) : 2000;
     ppgYAxisFixedMaxStep = uiWave && typeof uiWave.ppg_y_axis_fixed_max_step === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_step) : 10;
+    ppgOutlierThreshold = uiWave && typeof uiWave.ppg_outlier_threshold === 'number' ? Number(uiWave.ppg_outlier_threshold) : 2000;
     const ppgDynDefault = uiWave && typeof uiWave.ppg_y_axis_dynamic_default === 'boolean' ? !!uiWave.ppg_y_axis_dynamic_default : true;
     const ppgFixedDefault = uiWave && typeof uiWave.ppg_y_axis_fixed_max_default === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_default) : 50;
     let storedPpgDyn = null;
@@ -1371,6 +1373,7 @@ export async function enterEegPage() {
   if (ppgView) ppgView.dispose();
   ppgView = new PpgView({ windowSec: eegWindowSec, enabled: ppgEnabled });
   ppgView.setYAxisMode({ dynamic: ppgYAxisDynamicEnabled, fixedMax: ppgYAxisFixedMax });
+  ppgView.setOutlierThreshold(ppgOutlierThreshold);
   ppgView.mount(document.getElementById('charts-grid'));
   observeEegChartLayout();
   if (!eegGridScrollHandler) {

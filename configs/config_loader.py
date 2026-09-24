@@ -339,6 +339,7 @@ class WaveformUiConfig:
     ppg_y_axis_fixed_max_min: float
     ppg_y_axis_fixed_max_max: float
     ppg_y_axis_fixed_max_step: float
+    ppg_outlier_threshold: float
 
 
 @dataclass(frozen=True)
@@ -671,6 +672,11 @@ def load_config(config_path: str) -> AppConfig:
         ppg_y_axis_fixed_max_default = ppg_y_axis_fixed_max_min
     if ppg_y_axis_fixed_max_default > ppg_y_axis_fixed_max_max:
         ppg_y_axis_fixed_max_default = ppg_y_axis_fixed_max_max
+
+    # PPG 异常值过滤阈值：<=0 或非法值表示关闭过滤。
+    ppg_outlier_threshold = float(waveform_ui_raw.get("ppg_outlier_threshold", 2000.0))
+    if not (ppg_outlier_threshold == ppg_outlier_threshold):
+        ppg_outlier_threshold = 2000.0
 
     def _as_u8_list(items: Any) -> List[int]:
         if not isinstance(items, list):
@@ -1240,6 +1246,7 @@ def load_config(config_path: str) -> AppConfig:
             ppg_y_axis_fixed_max_min=ppg_y_axis_fixed_max_min,
             ppg_y_axis_fixed_max_max=ppg_y_axis_fixed_max_max,
             ppg_y_axis_fixed_max_step=ppg_y_axis_fixed_max_step,
+            ppg_outlier_threshold=ppg_outlier_threshold,
         )
     )
 

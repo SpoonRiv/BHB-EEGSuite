@@ -33,6 +33,8 @@ ui:
     ppg_y_axis_fixed_max_min: 10
     ppg_y_axis_fixed_max_max: 2000
     ppg_y_axis_fixed_max_step: 10
+    # PPG 异常值过滤阈值（对减去窗口均值后的交流计数取绝对值，超过则丢弃该点，不参与显示；<=0 表示关闭过滤）。
+    ppg_outlier_threshold: 2000
 
 bluetooth:
   device_names:

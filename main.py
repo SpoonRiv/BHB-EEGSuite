@@ -1445,6 +1445,7 @@ async def get_config():
                 "ppg_y_axis_fixed_max_min": float(getattr(state.config.ui.waveform, "ppg_y_axis_fixed_max_min", 10.0)),
                 "ppg_y_axis_fixed_max_max": float(getattr(state.config.ui.waveform, "ppg_y_axis_fixed_max_max", 2000.0)),
                 "ppg_y_axis_fixed_max_step": float(getattr(state.config.ui.waveform, "ppg_y_axis_fixed_max_step", 10.0)),
+                "ppg_outlier_threshold": float(getattr(state.config.ui.waveform, "ppg_outlier_threshold", 2000.0)),
             }
         },
         "n_channels": eeg_n_channels,

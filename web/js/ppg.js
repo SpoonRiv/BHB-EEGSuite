@@ -26,6 +26,18 @@ export class PpgView {
     // Y 轴量程模式：动态（跟随数据自适应）或固定（±fixedMax）。
     this.yAxisDynamic = true;
     this.yAxisFixedMax = 50;
+    // 异常值过滤阈值（去均值后的交流计数绝对值上限，超过则丢弃该点；<=0 关闭过滤）。
+    this.outlierThreshold = 2000;
+  }
+
+  /**
+   * 设置异常值过滤阈值。
+   * @param {number} next 阈值（<=0 或非法值表示关闭过滤）
+   */
+  setOutlierThreshold(next) {
+    const t = Number(next);
+    this.outlierThreshold = Number.isFinite(t) && t > 0 ? t : 0;
+    this.dirty = true;
   }
 
   /**
@@ -199,13 +211,23 @@ export class PpgView {
     }
     const means = {};
     for (const { key } of CHANNELS) means[key] = counts[key] ? sums[key] / counts[key] : 0;
+    const threshold = this.outlierThreshold;
     this.chart.setOption({
       series: CHANNELS.map(({ key }) => ({
         showSymbol: this.samples.length === 1,
-        data: this.samples.map(sample => {
-          const v = Number(sample[key]);
-          return [sample.ts - latest, Number.isFinite(v) ? v - means[key] : null];
-        }),
+        // 超阈值异常点直接从序列中剔除（前后点自动相连，波形保持连续）；
+        // 无数据的断点占位仍保留 null，避免把采集暂停绘成连续信号。
+        data: (() => {
+          const out = [];
+          for (const sample of this.samples) {
+            const v = Number(sample[key]);
+            if (!Number.isFinite(v)) { out.push([sample.ts - latest, null]); continue; }
+            const dv = v - means[key];
+            if (threshold > 0 && Math.abs(dv) > threshold) continue;
+            out.push([sample.ts - latest, dv]);
+          }
+          return out;
+        })(),
       })),
     });
   }
