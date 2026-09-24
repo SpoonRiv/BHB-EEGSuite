@@ -47,10 +47,10 @@ let eegYAxisFixedMaxStep = 50;
 let eegYAxisModeDirty = false;
 
 let ppgYAxisDynamicEnabled = true;
-let ppgYAxisFixedMax = 20000;
-let ppgYAxisFixedMaxMin = 1000;
-let ppgYAxisFixedMaxMax = 200000;
-let ppgYAxisFixedMaxStep = 1000;
+let ppgYAxisFixedMax = 50;
+let ppgYAxisFixedMaxMin = 10;
+let ppgYAxisFixedMaxMax = 2000;
+let ppgYAxisFixedMaxStep = 10;
 
 let eegRings = [];
 let eegDataDirty = false;
@@ -537,25 +537,50 @@ function buildSettingsPopover() {
     ppgRangeInput.step = String(ppgYAxisFixedMaxStep);
     ppgRangeInput.value = String(ppgYAxisFixedMax);
     ppgRangeInput.disabled = !!ppgYAxisDynamicEnabled;
-    const ppgPill = document.createElement('span');
-    ppgPill.className = 'eeg-settings-pill';
-    ppgPill.textContent = `±${Math.round(Number(ppgYAxisFixedMax) || 0)}`;
-    if (ppgYAxisDynamicEnabled) ppgPill.classList.add('is-dim');
+    // 数值输入框：与滑条双向联动，可精确输入量程值。
+    const ppgNumWrap = document.createElement('span');
+    ppgNumWrap.className = 'eeg-settings-pill';
+    ppgNumWrap.style.display = 'inline-flex';
+    ppgNumWrap.style.alignItems = 'center';
+    ppgNumWrap.style.gap = '4px';
+    if (ppgYAxisDynamicEnabled) ppgNumWrap.classList.add('is-dim');
+    const ppgNumSign = document.createElement('span');
+    ppgNumSign.textContent = '±';
+    const ppgNumInput = document.createElement('input');
+    ppgNumInput.type = 'number';
+    ppgNumInput.min = String(ppgYAxisFixedMaxMin);
+    ppgNumInput.max = String(ppgYAxisFixedMaxMax);
+    ppgNumInput.step = String(ppgYAxisFixedMaxStep);
+    ppgNumInput.value = String(ppgYAxisFixedMax);
+    ppgNumInput.disabled = !!ppgYAxisDynamicEnabled;
+    ppgNumInput.style.width = '72px';
+    ppgNumInput.style.background = 'transparent';
+    ppgNumInput.style.border = 'none';
+    ppgNumInput.style.color = 'inherit';
+    ppgNumInput.style.font = 'inherit';
+    ppgNumInput.style.textAlign = 'right';
+    ppgNumWrap.appendChild(ppgNumSign);
+    ppgNumWrap.appendChild(ppgNumInput);
     rowPRange.appendChild(ppgRangeLabel);
     rowPRange.appendChild(ppgRangeInput);
-    rowPRange.appendChild(ppgPill);
+    rowPRange.appendChild(ppgNumWrap);
     secPpg.appendChild(rowPRange);
     body.appendChild(secPpg);
 
     const applyPpgYUiState = () => {
       ppgRangeInput.disabled = !!ppgYAxisDynamicEnabled;
-      ppgPill.classList.toggle('is-dim', !!ppgYAxisDynamicEnabled);
-      ppgPill.textContent = `±${Math.round(Number(ppgYAxisFixedMax) || 0)}`;
+      ppgNumInput.disabled = !!ppgYAxisDynamicEnabled;
+      ppgNumWrap.classList.toggle('is-dim', !!ppgYAxisDynamicEnabled);
+      ppgRangeInput.value = String(ppgYAxisFixedMax);
+      ppgNumInput.value = String(ppgYAxisFixedMax);
     };
     ppgDynInput.onchange = () => { setPpgYAxisMode(ppgDynInput.checked); applyPpgYUiState(); };
     ppgRangeInput.oninput = () => {
       setPpgFixedYAxisMax(ppgRangeInput.value);
-      ppgRangeInput.value = String(ppgYAxisFixedMax);
+      applyPpgYUiState();
+    };
+    ppgNumInput.onchange = () => {
+      setPpgFixedYAxisMax(ppgNumInput.value);
       applyPpgYUiState();
     };
   }
@@ -576,7 +601,6 @@ function buildSettingsPopover() {
   const xInput = document.createElement('input');
   xInput.type = 'number';
   xInput.min = '0.5';
-  xInput.max = '10';
   xInput.step = '0.5';
   xInput.value = String(eegWindowSec);
   xInput.className = 'eeg-settings-num';
@@ -586,7 +610,7 @@ function buildSettingsPopover() {
   body.appendChild(sec2);
 
   xInput.onchange = () => {
-    const v = clampNumber(xInput.value, 0.5, 10, eegWindowSec);
+    const v = clampNumber(xInput.value, 0.5, Number.POSITIVE_INFINITY, eegWindowSec);
     eegWindowSec = v;
     xInput.value = String(v);
     maxPoints = Math.max(50, Math.floor(Math.max(1, eegSamplingRateHz) * Math.max(0.2, eegWindowSec)));
@@ -1279,11 +1303,11 @@ export async function enterEegPage() {
     try { storedMax = localStorage.getItem('bhb_eeg_yaxis_fixed_max'); } catch (_) {}
     eegYAxisDynamicEnabled = storedDyn === null ? dynDefault : (String(storedDyn) === '1');
     eegYAxisFixedMax = clampNumber(storedMax === null ? fixedDefault : storedMax, eegYAxisFixedMaxMin, eegYAxisFixedMaxMax, fixedDefault);
-    ppgYAxisFixedMaxMin = uiWave && typeof uiWave.ppg_y_axis_fixed_max_min === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_min) : 1000;
-    ppgYAxisFixedMaxMax = uiWave && typeof uiWave.ppg_y_axis_fixed_max_max === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_max) : 200000;
-    ppgYAxisFixedMaxStep = uiWave && typeof uiWave.ppg_y_axis_fixed_max_step === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_step) : 1000;
+    ppgYAxisFixedMaxMin = uiWave && typeof uiWave.ppg_y_axis_fixed_max_min === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_min) : 10;
+    ppgYAxisFixedMaxMax = uiWave && typeof uiWave.ppg_y_axis_fixed_max_max === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_max) : 2000;
+    ppgYAxisFixedMaxStep = uiWave && typeof uiWave.ppg_y_axis_fixed_max_step === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_step) : 10;
     const ppgDynDefault = uiWave && typeof uiWave.ppg_y_axis_dynamic_default === 'boolean' ? !!uiWave.ppg_y_axis_dynamic_default : true;
-    const ppgFixedDefault = uiWave && typeof uiWave.ppg_y_axis_fixed_max_default === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_default) : 20000;
+    const ppgFixedDefault = uiWave && typeof uiWave.ppg_y_axis_fixed_max_default === 'number' ? Number(uiWave.ppg_y_axis_fixed_max_default) : 50;
     let storedPpgDyn = null;
     let storedPpgMax = null;
     try { storedPpgDyn = localStorage.getItem('bhb_ppg_yaxis_dynamic'); } catch (_) {}

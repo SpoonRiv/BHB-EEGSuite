@@ -1,5 +1,5 @@
 app:
-  ui_version: "3.4.1"
+  ui_version: "3.4.0"
 
 ui:
   waveform:
@@ -28,11 +28,11 @@ ui:
     # PPG 波形 y 轴是否动态变化（true=动态缩放；false=固定缩放，最大值由滑条控制）。
     ppg_y_axis_dynamic_default: true
     # PPG 固定缩放模式下的 y 轴最大值默认值（显示范围为 [-max, +max]；波形已减去窗口均值，单位为交流计数）。
-    ppg_y_axis_fixed_max_default: 20000
+    ppg_y_axis_fixed_max_default: 50
     # PPG 固定缩放模式下滑条最小/最大/步进。
-    ppg_y_axis_fixed_max_min: 1000
-    ppg_y_axis_fixed_max_max: 200000
-    ppg_y_axis_fixed_max_step: 1000
+    ppg_y_axis_fixed_max_min: 10
+    ppg_y_axis_fixed_max_max: 2000
+    ppg_y_axis_fixed_max_step: 10
 
 bluetooth:
   device_names:

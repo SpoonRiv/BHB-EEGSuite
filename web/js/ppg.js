@@ -25,7 +25,7 @@ export class PpgView {
     this.reconnectTimer = null;
     // Y 轴量程模式：动态（跟随数据自适应）或固定（±fixedMax）。
     this.yAxisDynamic = true;
-    this.yAxisFixedMax = 20000;
+    this.yAxisFixedMax = 50;
   }
 
   /**
@@ -110,7 +110,13 @@ export class PpgView {
         axisLine: { show: false }, axisTick: { show: false },
         axisLabel: {
           fontSize: 10, margin: 10,
-          formatter: value => Number(value).toExponential(2),
+          // 直接显示原始计数数字，不使用科学计数法。
+          formatter: value => {
+            const v = Number(value);
+            if (!Number.isFinite(v)) return '';
+            if (Math.abs(v - Math.round(v)) < 1e-6) return String(Math.round(v));
+            return String(Math.round(v * 100) / 100);
+          },
         },
         splitLine: { lineStyle: { type: 'dashed' } },
       })),
