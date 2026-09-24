@@ -197,7 +197,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">01</span>
                                     <span class="mode-card__state"><i></i><span>READY</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/impedance_mode.png" alt="阻抗检测模式" />
+                                <img class="mode-hero" src="image/impedance_mode.webp" alt="阻抗检测模式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -216,7 +216,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">02</span>
                                     <span class="mode-card__state"><i></i><span>READY</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/eeg_mode.png" alt="脑电采集模式" />
+                                <img class="mode-hero" src="image/eeg_mode.webp" alt="脑电采集模式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -240,7 +240,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">03</span>
                                     <span class="mode-card__state"><i></i><span>READY</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/tdcs_mode.png" alt="电刺激 tDCS 模式" />
+                                <img class="mode-hero" src="image/tdcs_mode.webp" alt="电刺激 tDCS 模式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -259,7 +259,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">04</span>
                                     <span class="mode-card__state mode-card__state--soon"><i></i><span>SOON</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/ssvep_mode.png" alt="稳态视觉诱发电位模式" />
+                                <img class="mode-hero" src="image/ssvep_mode.webp" alt="稳态视觉诱发电位模式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -278,7 +278,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">05</span>
                                     <span class="mode-card__state mode-card__state--soon"><i></i><span>SOON</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/mi_mode.png" alt="运动想象模式" />
+                                <img class="mode-hero" src="image/mi_mode.webp" alt="运动想象模式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -297,7 +297,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
                                     <span class="mode-card__index">06</span>
                                     <span class="mode-card__state"><i></i><span id="music-module-state">未安装</span></span>
                                 </div>
-                                <img class="mode-hero" src="image/music_mode.png" alt="文本-音频多模态范式" />
+                                <img class="mode-hero" src="image/music_mode.webp" alt="文本-音频多模态范式" />
                             </div>
                             <div class="mode-meta">
                                 <div class="mode-meta__head">
@@ -782,7 +782,8 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
             <div class="module-catalog-copy">
                 <strong>文本-音频多模态范式</strong>
                 <p>文本与音频同步呈现、脑电采集、实验事件记录与批量导出。</p>
-                <div class="module-catalog-meta"><span id="module-installed-state">未安装</span></div>
+                <div class="module-catalog-meta"><span id="module-installed-state">未安装</span><span id="module-source-error" hidden></span></div>
+                <progress id="module-progress" max="100" value="0" hidden aria-label="模块下载进度"></progress>
             </div>
             <div class="module-catalog-actions">
                 <button class="btn btn--primary" id="module-install" type="button" disabled>安装</button>

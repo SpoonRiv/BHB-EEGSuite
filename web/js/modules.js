@@ -1,21 +1,31 @@
 /* Experiment pages are served only after the backend confirms installation. */
-import { getModules, installModule, uninstallModule } from './api.js';
+import { getModules, refreshModules, getModuleStatus, installModule, uninstallModule } from './api.js';
 import { navigate, registerRoute } from './router.js';
 
 const $ = id => document.getElementById(id);
 const assetRoot = '/api/modules/music/assets/';
 let moduleInfo = null, moduleScript = null, loading = null;
 let changing = '', actionError = '', focusReturn = null;
+let installStatus = null;
 
 function renderCatalog() {
   const installed = !!moduleInfo?.installed;
   const installing = changing === 'install';
   const uninstalling = changing === 'uninstall';
-  $('module-installed-state').textContent = actionError || (installed ? '已安装' : '未安装');
-  $('module-install').hidden = installed;
-  $('module-install').disabled = changing || !moduleInfo?.available;
+  $('module-installed-state').textContent = actionError || (installed ? `已安装 ${moduleInfo?.version || '旧版'}` :
+    changing === 'install' ? '正在安装' : moduleInfo?.error || (moduleInfo?.version ? `可安装 ${moduleInfo.version}` : '检查模块源中'));
+  $('module-source-error').hidden = !installed || !moduleInfo?.error;
+  $('module-source-error').textContent = installed ? moduleInfo?.error || '' : '';
+  $('module-install').hidden = installed && !moduleInfo?.update_available;
+  $('module-install').disabled = changing || !moduleInfo?.available || !!moduleInfo?.busy;
   $('module-install').classList.toggle('module-action--busy', installing);
-  $('module-install').textContent = installing ? '安装中' : moduleInfo && !moduleInfo.available ? '安装包缺失' : '安装';
+  $('module-install').textContent = installing ? '安装中' : installed ? `更新至 ${moduleInfo.latest_version}` : '下载并安装';
+  const downloading = installing && installStatus?.phase === 'downloading';
+  $('module-progress').hidden = !downloading;
+  if (downloading) {
+    const total = installStatus.total || 1;
+    $('module-progress').value = Math.round(installStatus.downloaded / total * 100);
+  }
   $('module-uninstall').hidden = !installed;
   $('module-uninstall').disabled = changing || !!moduleInfo?.busy;
   $('module-uninstall').classList.toggle('module-action--busy', uninstalling);
@@ -43,8 +53,8 @@ async function loadStyle() {
   });
 }
 
-async function refreshCatalog() {
-  const catalog = await getModules();
+async function refreshCatalog(remote = false) {
+  const catalog = await (remote ? refreshModules() : getModules());
   moduleInfo = (catalog?.modules || []).find(item => item.id === 'music') || null;
   actionError = '';
   renderCatalog();
@@ -62,7 +72,7 @@ async function openManager() {
   $('module-manager-modal').hidden = false;
   $('module-manager-close').focus();
   try {
-    await refreshCatalog();
+    await refreshCatalog(true);
   } catch (error) {
     console.error('module catalog failed', error);
     moduleInfo = null;
@@ -102,16 +112,24 @@ async function beforeMusicPage() {
 async function installMusic() {
   if (changing) return;
   if (!moduleInfo?.available) return;
-  changing = 'install'; renderCatalog();
+  const updating = !!moduleInfo.installed;
+  changing = 'install'; installStatus = null; renderCatalog();
+  const progressTimer = setInterval(async () => {
+    try { installStatus = await getModuleStatus('music'); renderCatalog(); } catch (_) {}
+  }, 350);
   try {
-    // Keep the busy indicator visible for one rotation on fast local installs.
-    await Promise.all([installModule('music'), new Promise(resolve => setTimeout(resolve, 800))]);
+    await installModule('music');
     await refreshCatalog();
+    if (updating) {
+      history.replaceState(null, '', window.location.pathname + '#mode'); window.location.reload();
+      return;
+    }
   } catch (error) {
     console.error('module installation failed', error);
-    actionError = '安装失败，请重试';
+    actionError = error.message || '安装失败，请重试';
   } finally {
-    changing = ''; renderCatalog();
+    clearInterval(progressTimer);
+    changing = ''; installStatus = null; renderCatalog();
     if (!$('module-manager-modal').hidden) (moduleInfo?.installed ? $('module-uninstall') : $('module-install')).focus();
   }
 }

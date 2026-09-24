@@ -391,6 +391,7 @@ class TdcsConfig:
 @dataclass(frozen=True)
 class AppConfig:
     app_ui_version: str
+    module_catalog_url: str
     ui: UiConfig
     bluetooth: BluetoothConfig
     eeg: EegConfig
@@ -1196,6 +1197,7 @@ def load_config(config_path: str) -> AppConfig:
 
     return AppConfig(
         app_ui_version=app_ui_version,
+        module_catalog_url=str((raw.get("modules") or {}).get("catalog_url") or ""),
         ui=ui,
         bluetooth=bluetooth,
         eeg=eeg,

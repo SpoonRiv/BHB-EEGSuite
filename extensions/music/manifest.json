@@ -2,6 +2,7 @@
   "id": "music",
   "name": "文本-音频多模态范式",
   "host_api": 1,
+  "version": "V1",
   "entry": "__init__.py",
   "assets": ["pages.html", "music.js", "api.js", "music.css"]
 }

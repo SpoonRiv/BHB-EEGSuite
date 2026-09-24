@@ -34,6 +34,8 @@ export async function getStatus() {
 }
 
 export async function getModules() { return fetchJson('/api/modules'); }
+export async function refreshModules() { return fetchJson('/api/modules/refresh', { cache: 'no-store' }); }
+export async function getModuleStatus(moduleId) { return fetchJson(`/api/modules/${encodeURIComponent(moduleId)}/status`, { cache: 'no-store' }); }
 export async function installModule(moduleId) { return fetchJson(`/api/modules/${encodeURIComponent(moduleId)}/install`, { method: 'POST' }); }
 export async function uninstallModule(moduleId) { return fetchJson(`/api/modules/${encodeURIComponent(moduleId)}/uninstall`, { method: 'POST' }); }
 

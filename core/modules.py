@@ -1,10 +1,7 @@
-"""Local optional modules: atomic installation, lazy loading and gated assets.
-
-The base application does not import or serve an optional package before it is
-installed. Packages are distributed separately under optional_modules/<id>.
-"""
+"""Optional module runtime: verified remote installation and gated assets."""
 
 import asyncio
+import hashlib
 import importlib.util
 import json
 import logging
@@ -15,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from core.module_store import ModuleStore
 
 
 class OptionalModuleManager:
@@ -23,11 +21,11 @@ class OptionalModuleManager:
     REQUIRED = ("__init__.py", "manifest.json", "library.py", "service.py", "routes.py",
                 "web/pages.html", "web/music.js", "web/api.js", "web/music.css")
 
-    def __init__(self, project_root, state, acquire, release):
+    def __init__(self, project_root, state, acquire, release, catalog_url=""):
         self.project_root = Path(project_root).resolve()
-        self.package_dir = self.project_root / "optional_modules" / self.MODULE_ID
         self.install_root = self.project_root / "module_data"
         self.installed_dir = self.install_root / self.MODULE_ID
+        self.store = ModuleStore(catalog_url)
         self.state = state
         self.acquire = acquire
         self.release = release
@@ -37,6 +35,9 @@ class OptionalModuleManager:
         self.requests = 0
         self.error = ""
         self.manifest = {}
+        self.remote_release = None
+        self.catalog_error = ""
+        self.progress = {"phase": "idle", "downloaded": 0, "total": 0}
         self.namespace = f"_eegsuite_module_{uuid.uuid4().hex}"
 
     @property
@@ -65,24 +66,44 @@ class OptionalModuleManager:
             raise ValueError("模块安装包缺少音频资源")
         return manifest
 
-    def catalog(self):
-        package = {}
-        available = False
+    async def catalog(self):
         try:
-            package = self._validate_package(self.package_dir)
-            available = True
-        except (OSError, ValueError):
-            pass
+            self.remote_release = await asyncio.to_thread(self.store.release, self.MODULE_ID)
+            self.catalog_error = ""
+        except (ValueError, OSError) as exc:
+            self.remote_release = None
+            self.catalog_error = str(exc)
+        return self._catalog_view()
+
+    def _catalog_view(self):
         installed = self.service is not None
-        if installed:
-            package = self.manifest
         return {"modules": [{
             "id": self.MODULE_ID, "name": self.NAME,
             "description": "文本与音频同步呈现，复用上位机脑电采集，支持逐项记录和批量导出。",
-            "installed": installed, "available": available,
+            "installed": installed, "available": bool(self.remote_release),
+            "version": self.manifest.get("version") if installed else (self.remote_release or {}).get("version"),
+            "latest_version": (self.remote_release or {}).get("version"),
+            "update_available": installed and bool(self.remote_release)
+                                and self.manifest.get("version") != self.remote_release["version"],
             "busy": self.active or self.requests > 0 or self.lock.locked(),
-            "error": self.error,
+            "error": self.error or self.catalog_error,
         }]}
+
+    def status(self):
+        return dict(self.progress)
+
+    def _set_progress(self, phase, downloaded=0, total=0):
+        self.progress = {"phase": phase, "downloaded": downloaded, "total": total}
+
+    @staticmethod
+    def _verified_cache(path, release):
+        if not path.is_file() or path.stat().st_size != release["size"]:
+            return False
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(256 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest() == release["sha256"]
 
     def _clear_imports(self):
         for name in list(sys.modules):
@@ -132,26 +153,43 @@ class OptionalModuleManager:
         if path.exists():
             shutil.rmtree(path)
 
-    def _copy_package(self, staging):
-        self._validate_package(self.package_dir)
-        for path in self.package_dir.rglob("*"):
-            if path.is_symlink() or not path.resolve().is_relative_to(self.package_dir.resolve()):
-                raise ValueError("模块安装包不能包含外部链接")
-        shutil.copytree(self.package_dir, staging, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        self._validate_package(staging)
-
     async def install(self):
         async with self.lock:
-            if self.service:
-                return self.catalog()
-            if not self.package_dir.is_dir():
-                raise ValueError("未找到安装包，请将 music 模块放入 optional_modules 目录后重试")
+            if self.active or self.requests:
+                raise ValueError("模块正在运行或导出，请结束后再更新")
             self.install_root.mkdir(parents=True, exist_ok=True)
             staging = self.install_root / f".music-install-{uuid.uuid4().hex}"
             backup = self.install_root / f".music-backup-{uuid.uuid4().hex}"
+            part = self.install_root / f".music-download-{uuid.uuid4().hex}.part"
             moved = False
+            old_service_loaded = self.service is not None
             try:
-                await asyncio.to_thread(self._copy_package, staging)
+                self._set_progress("checking")
+                release = await asyncio.to_thread(self.store.release, self.MODULE_ID)
+                self.remote_release = release
+                self.catalog_error = ""
+                if self.service and self.manifest.get("version") == release["version"]:
+                    self._set_progress("complete")
+                    return self._catalog_view()
+                cache_dir = self.install_root / "cache"
+                cache_dir.mkdir(exist_ok=True)
+                archive = cache_dir / f"{self.MODULE_ID}-{release['sha256']}.zip"
+                if not await asyncio.to_thread(self._verified_cache, archive, release):
+                    self._set_progress("downloading", 0, release["size"])
+                    await asyncio.to_thread(self.store.download, release, part,
+                                            lambda done, total: self._set_progress("downloading", done, total))
+                    part.replace(archive)
+                self._set_progress("extracting")
+                await asyncio.to_thread(self.store.extract, archive, staging, self.MODULE_ID)
+                manifest = self._validate_package(staging)
+                if manifest.get("version") != release["version"]:
+                    raise ValueError("模块包版本与远程索引不一致")
+                self._set_progress("installing")
+                if self.service:
+                    self.state.streamer.remove_callback(self.service.on_chunk)
+                    self.service = self.application = None
+                    self.manifest = {}
+                    self._clear_imports()
                 if self.installed_dir.exists():
                     self.installed_dir.rename(backup)
                 staging.rename(self.installed_dir)
@@ -162,11 +200,15 @@ class OptionalModuleManager:
                     self._remove_install_tree(self.installed_dir)
                 if backup.exists():
                     backup.rename(self.installed_dir)
+                if old_service_loaded and self.service is None and self.installed_dir.exists():
+                    self._load()
                 raise
             finally:
                 self._remove_install_tree(staging)
+                part.unlink(missing_ok=True)
             self._remove_install_tree(backup)
-        return self.catalog()
+            self._set_progress("complete")
+        return self._catalog_view()
 
     async def uninstall(self):
         async with self.lock:
@@ -184,7 +226,7 @@ class OptionalModuleManager:
             self.error = ""
             if retired.exists():
                 await asyncio.to_thread(self._remove_install_tree, retired)
-        return self.catalog()
+        return self._catalog_view()
 
     def asset(self, relative):
         if not self.service:
@@ -215,7 +257,16 @@ def create_module_router(manager):
 
     @router.get("")
     async def catalog():
-        return manager.catalog()
+        return manager._catalog_view()
+
+    @router.get("/refresh")
+    async def refresh_catalog():
+        return await manager.catalog()
+
+    @router.get("/{module_id}/status")
+    async def status(module_id: str):
+        check_id(module_id)
+        return manager.status()
 
     @router.post("/{module_id}/install")
     async def install(module_id: str):
@@ -223,8 +274,10 @@ def create_module_router(manager):
         try:
             return await manager.install()
         except (ValueError, OSError) as exc:
+            manager._set_progress("failed")
             raise HTTPException(409, f"安装失败：{exc}") from exc
         except Exception as exc:
+            manager._set_progress("failed")
             logging.exception("Optional module installation failed")
             raise HTTPException(409, "模块加载失败，请检查安装包后重试") from exc
 

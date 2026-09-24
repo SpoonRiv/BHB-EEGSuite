@@ -1,5 +1,9 @@
 app:
-  ui_version: "3.5.5"
+  ui_version: "3.5.6"
+
+modules:
+  # 发布者需把 modules.json 和模块 ZIP 上传到远程 Release；可在 config.local.yaml 覆盖。
+  catalog_url: "https://github.com/SpoonRiv/BHB-EEGSuite/releases/latest/download/modules.json"
 
 ui:
   waveform:

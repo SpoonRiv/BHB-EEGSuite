@@ -1021,7 +1021,8 @@ async def _music_release():
     return {"status": "success" if stopped else "error", "message": "EEG 停止指令投递失败，请检查设备连接" if not stopped else "EEG 已停止"}
 
 
-music_service = OptionalModuleManager(os.path.dirname(__file__), state, _music_acquire, _music_release)
+music_service = OptionalModuleManager(os.path.dirname(__file__), state, _music_acquire,
+                                      _music_release, state.config.module_catalog_url)
 
 
 def shutdown_runtime() -> None:
