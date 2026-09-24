@@ -1,4 +1,4 @@
-/* PPG optical waveforms: raw 24-bit values, separate from EEG processing.
+/* PPG optical waveforms, separate from EEG processing.
    绘制前减去当前显示窗口内的逐通道均值（动态计算），突出交流成分。 */
 
 const CHANNELS = [
@@ -67,6 +67,10 @@ export class PpgView {
     this.dirty = true;
   }
 
+  setFilterEnabled(enabled) {
+    if (this.filterStateEl) this.filterStateEl.textContent = enabled ? '带通滤波' : '未带通';
+  }
+
   /** 将当前量程模式写入图表（动态模式下恢复自适应）。 */
   _applyYAxisMode() {
     if (!this.chart) return;
@@ -84,7 +88,7 @@ export class PpgView {
     this.panel.setAttribute('aria-label', 'PPG 三路光学波形');
     this.panel.innerHTML = `
       <div class="ppg-heading">
-        <div class="ppg-heading-title">PPG 波形 <span>滤波值</span></div>
+        <div class="ppg-heading-title">PPG 波形 <span class="ppg-filter-state">带通滤波</span></div>
         <span class="ppg-status" role="status">等待采集</span>
       </div>
       <div class="ppg-chart" id="chart-ppg"></div>`;
@@ -92,6 +96,7 @@ export class PpgView {
     // EEG waveform cards below it.
     grid.prepend(this.panel);
     this.statusEl = this.panel.querySelector('.ppg-status');
+    this.filterStateEl = this.panel.querySelector('.ppg-filter-state');
     this.chartEl = this.panel.querySelector('.ppg-chart');
     if (!window.echarts) {
       this.setStatus('波形组件未加载');

@@ -5,7 +5,7 @@ Copyright (c) 2026 BUAA BHB. All rights reserved.
 作者: Spoon
 */
 
-import { getConfig, getStatus, modeStart, modeStop, getSignalBandpass, setSignalBandpass } from './api.js';
+import { getConfig, getStatus, modeStart, modeStop, getSignalBandpass, setSignalBandpass, getPpgBandpass, setPpgBandpass } from './api.js';
 import { navigate } from './router.js';
 import { EegPsdView } from './eeg_psd.js';
 import { PpgView } from './ppg.js';
@@ -437,7 +437,30 @@ function buildSettingsPopover() {
     popover.hidden = !opening;
     toggleBtn.innerHTML = opening ? CLOSE_SVG : GEAR_SVG;
   };
+  const closeBtn = popover.querySelector('.eeg-settings-close');
+  if (closeBtn) closeBtn.onclick = closeTimeSettingsPopover;
   body.innerHTML = '';
+  popover.classList.toggle('eeg-settings-popover--dual', ppgEnabled);
+  const columns = document.createElement('div');
+  columns.className = 'eeg-settings-columns';
+  const eegColumn = document.createElement('div');
+  eegColumn.className = 'eeg-settings-column';
+  const eegHeading = document.createElement('div');
+  eegHeading.className = 'eeg-settings-column-title';
+  eegHeading.textContent = 'EEG';
+  eegColumn.appendChild(eegHeading);
+  columns.appendChild(eegColumn);
+  let ppgColumn = null;
+  if (ppgEnabled) {
+    ppgColumn = document.createElement('div');
+    ppgColumn.className = 'eeg-settings-column';
+    const ppgHeading = document.createElement('div');
+    ppgHeading.className = 'eeg-settings-column-title';
+    ppgHeading.textContent = 'PPG';
+    ppgColumn.appendChild(ppgHeading);
+    columns.appendChild(ppgColumn);
+  }
+  body.appendChild(columns);
 
   // === Section 1: 垂直量程 ===
   const sec1 = document.createElement('div');
@@ -485,7 +508,7 @@ function buildSettingsPopover() {
   row1Range.appendChild(rangeInput);
   row1Range.appendChild(pill);
   sec1.appendChild(row1Range);
-  body.appendChild(sec1);
+  eegColumn.appendChild(sec1);
 
   const applyYUiState = () => {
     rangeInput.disabled = !!eegYAxisDynamicEnabled;
@@ -505,7 +528,7 @@ function buildSettingsPopover() {
     secPpg.className = 'eeg-settings-section';
     const secPpgTitle = document.createElement('div');
     secPpgTitle.className = 'eeg-settings-section-title';
-    secPpgTitle.textContent = 'PPG 垂直量程（幅值）';
+    secPpgTitle.textContent = '垂直量程（幅值）';
     secPpg.appendChild(secPpgTitle);
 
     const rowPSwitch = document.createElement('div');
@@ -549,6 +572,7 @@ function buildSettingsPopover() {
     ppgNumSign.textContent = '±';
     const ppgNumInput = document.createElement('input');
     ppgNumInput.type = 'number';
+    ppgNumInput.className = 'eeg-settings-num';
     ppgNumInput.min = String(ppgYAxisFixedMaxMin);
     ppgNumInput.max = String(ppgYAxisFixedMaxMax);
     ppgNumInput.step = String(ppgYAxisFixedMaxStep);
@@ -566,7 +590,7 @@ function buildSettingsPopover() {
     rowPRange.appendChild(ppgRangeInput);
     rowPRange.appendChild(ppgNumWrap);
     secPpg.appendChild(rowPRange);
-    body.appendChild(secPpg);
+    ppgColumn.appendChild(secPpg);
 
     const applyPpgYUiState = () => {
       ppgRangeInput.disabled = !!ppgYAxisDynamicEnabled;
@@ -608,7 +632,7 @@ function buildSettingsPopover() {
   row2.appendChild(xLabel);
   row2.appendChild(xInput);
   sec2.appendChild(row2);
-  body.appendChild(sec2);
+  body.insertBefore(sec2, columns);
 
   xInput.onchange = () => {
     const v = clampNumber(xInput.value, 0.5, Number.POSITIVE_INFINITY, eegWindowSec);
@@ -702,30 +726,103 @@ function buildSettingsPopover() {
   applyBtn.type = 'button';
   applyBtn.className = 'eeg-settings-apply-btn';
   applyBtn.textContent = '应用';
-  sec3.appendChild(applyBtn);
-  body.appendChild(sec3);
-
-  applyBtn.onclick = async () => {
-    const enabled = bpInput.checked;
-    const lowcut_hz = clampNumber(lowInput.value, 0.1, 100, 0.5);
-    const highcut_hz = clampNumber(highInput.value, 1, 125, 80);
-    const order = clampNumber(orderInput.value, 2, 8, 4);
-    lowInput.value = String(lowcut_hz);
-    highInput.value = String(highcut_hz);
-    orderInput.value = String(order);
-    try {
-      await setSignalBandpass({ enabled, lowcut_hz, highcut_hz, order });
-    } catch (_) {}
-  };
+  eegColumn.appendChild(sec3);
+  const feedback = document.createElement('div');
+  feedback.className = 'eeg-settings-feedback';
+  feedback.setAttribute('role', 'status');
+  let ppgControls = null;
+  let eegApplied = null;
+  let ppgApplied = null;
 
   // 初始状态以后端有效参数为准；API 失败/未返回 enabled 时兜底保持 checked=true
   getSignalBandpass()
     .then((bp) => {
       if (bp && typeof bp === 'object' && typeof bp.enabled === 'boolean') {
         bpInput.checked = bp.enabled;
+        lowInput.value = String(bp.lowcut_hz);
+        highInput.value = String(bp.highcut_hz);
+        orderInput.value = String(bp.order);
+        eegApplied = bp;
       }
     })
     .catch(() => { bpInput.checked = true; });
+
+  if (ppgColumn) {
+    const ppgFilter = sec3.cloneNode(true);
+    const [ppgSwitch, ppgLow, ppgHigh, ppgOrder] = ppgFilter.querySelectorAll('input');
+    ppgControls = { ppgSwitch, ppgLow, ppgHigh, ppgOrder };
+    ppgSwitch.checked = true;
+    ppgLow.value = '0.5';
+    ppgLow.max = '49';
+    ppgHigh.value = '5';
+    ppgHigh.max = '49';
+    ppgOrder.value = '4';
+    ppgColumn.appendChild(ppgFilter);
+    getPpgBandpass().then(bp => {
+      ppgSwitch.checked = bp.enabled;
+      ppgLow.value = String(bp.lowcut_hz);
+      ppgHigh.value = String(bp.highcut_hz);
+      ppgOrder.value = String(bp.order);
+      ppgApplied = bp;
+      if (ppgView) ppgView.setFilterEnabled(bp.enabled);
+    }).catch(error => { feedback.textContent = `PPG：${error.message}`; });
+  }
+  body.appendChild(applyBtn);
+  body.appendChild(feedback);
+
+  applyBtn.onclick = async () => {
+    const eeg = {
+      enabled: bpInput.checked,
+      lowcut_hz: Number(lowInput.value),
+      highcut_hz: Number(highInput.value),
+      order: Number(orderInput.value),
+    };
+    if (!(0 < eeg.lowcut_hz && eeg.lowcut_hz < eeg.highcut_hz && eeg.highcut_hz < eegSamplingRateHz / 2) ||
+        !Number.isInteger(eeg.order) || eeg.order < 1 || eeg.order > 12) {
+      feedback.textContent = `EEG：频率需满足 0 < 低频 < 高频 < ${eegSamplingRateHz / 2} Hz，阶数为 1–12`;
+      return;
+    }
+    let ppg = null;
+    if (ppgControls) {
+      const { ppgSwitch, ppgLow, ppgHigh, ppgOrder } = ppgControls;
+      ppg = {
+        enabled: ppgSwitch.checked,
+        lowcut_hz: Number(ppgLow.value),
+        highcut_hz: Number(ppgHigh.value),
+        order: Number(ppgOrder.value),
+      };
+      if (!(0 < ppg.lowcut_hz && ppg.lowcut_hz < ppg.highcut_hz && ppg.highcut_hz < 50) ||
+          !Number.isInteger(ppg.order) || ppg.order < 1 || ppg.order > 12) {
+        feedback.textContent = 'PPG：频率需满足 0 < 低频 < 高频 < 50 Hz，阶数为 1–12';
+        return;
+      }
+    }
+    applyBtn.disabled = true;
+    feedback.textContent = '';
+    try {
+      const changed = (current, saved) => !saved ||
+        ['enabled', 'lowcut_hz', 'highcut_hz', 'order'].some(key => current[key] !== saved[key]);
+      const updates = [];
+      if (changed(eeg, eegApplied)) updates.push({ label: 'EEG', run: () => setSignalBandpass(eeg) });
+      if (ppg && changed(ppg, ppgApplied)) updates.push({ label: 'PPG', run: () => setPpgBandpass(ppg) });
+      const results = await Promise.allSettled(updates.map(update => update.run()));
+      feedback.textContent = updates.length ? results.map((result, index) => {
+        const label = updates[index].label;
+        if (result.status === 'rejected') return `${label}：${result.reason.message}`;
+        if (label === 'EEG') eegApplied = result.value;
+        else {
+          ppgApplied = result.value;
+          if (ppgView) {
+            ppgView.clear();
+            ppgView.setFilterEnabled(ppg.enabled);
+          }
+        }
+        return `${label} 已应用`;
+      }).join('；') : '设置未更改';
+    } finally {
+      applyBtn.disabled = false;
+    }
+  };
 }
 
 function closeTimeSettingsPopover() {

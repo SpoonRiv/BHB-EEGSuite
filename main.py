@@ -1291,6 +1291,26 @@ class BandpassUpdateRequest(BaseModel):
     order: int
 
 
+@app.get("/api/signal/ppg-bandpass")
+async def get_ppg_bandpass():
+    return state.controller.ppg_buffer.filter_config()
+
+
+@app.post("/api/signal/ppg-bandpass")
+async def update_ppg_bandpass(req: BandpassUpdateRequest):
+    sampling_rate = state.controller.ppg_buffer.filter_config()["sampling_rate_hz"]
+    if not math.isfinite(req.lowcut_hz) or not math.isfinite(req.highcut_hz):
+        raise HTTPException(status_code=400, detail="截止频率必须为有限数")
+    if not (0 < req.lowcut_hz < req.highcut_hz < sampling_rate / 2):
+        raise HTTPException(status_code=400, detail=f"截止频率必须满足 0 < 低频 < 高频 < {sampling_rate / 2:g} Hz")
+    if not (1 <= req.order <= 12):
+        raise HTTPException(status_code=400, detail="order 必须在 1 到 12 之间")
+    return state.controller.ppg_buffer.reconfigure_filter(
+        enabled=req.enabled, lowcut_hz=req.lowcut_hz,
+        highcut_hz=req.highcut_hz, order=req.order,
+    )
+
+
 @app.get("/api/signal/bandpass")
 async def get_bandpass():
     """

@@ -188,6 +188,18 @@ export async function setSignalBandpass(payload) {
   });
 }
 
+export async function getPpgBandpass() {
+  return fetchJson('/api/signal/ppg-bandpass');
+}
+
+export async function setPpgBandpass(payload) {
+  return fetchJson('/api/signal/ppg-bandpass', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getSignalQuality() {
   return fetchJson('/api/signal/quality');
 }

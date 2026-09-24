@@ -21,6 +21,23 @@ class PpgBuffer:
             self._session += 1
             self._filter.reset()
 
+    def filter_config(self) -> dict:
+        with self._lock:
+            return {
+                "enabled": self._filter.enabled,
+                "lowcut_hz": self._filter.lowcut_hz,
+                "highcut_hz": self._filter.highcut_hz,
+                "order": self._filter.order,
+                "sampling_rate_hz": self._filter.sampling_rate_hz,
+            }
+
+    def reconfigure_filter(self, *, enabled: bool, lowcut_hz: float, highcut_hz: float, order: int) -> dict:
+        with self._lock:
+            self._filter.reconfigure(enabled=enabled, lowcut_hz=lowcut_hz, highcut_hz=highcut_hz, order=order)
+            self._samples.clear()
+            self._session += 1
+        return self.filter_config()
+
     def append(self, value: dict, timestamp: float) -> None:
         if not isinstance(value, dict) or value.get("valid") is not True:
             return

@@ -3507,6 +3507,75 @@ select option {
   color: var(--text);
 }
 
+.eeg-settings-popover--dual {
+  width: 620px;
+}
+
+.eeg-settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.eeg-settings-popover:not(.eeg-settings-popover--dual) .eeg-settings-columns {
+  grid-template-columns: 1fr;
+}
+
+.eeg-settings-column {
+  min-width: 0;
+}
+
+.eeg-settings-column + .eeg-settings-column {
+  border-left: 1px solid rgba(140, 170, 210, 0.18);
+  padding-left: 20px;
+}
+
+.eeg-settings-column-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 3px 0 7px;
+}
+
+.eeg-settings-feedback {
+  min-height: 16px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.eeg-settings-popover--dual .eeg-settings-pill {
+  flex: 0 0 90px;
+  height: 26px;
+  min-height: 26px;
+  box-sizing: border-box;
+}
+
+.eeg-settings-popover--dual .eeg-settings-pill input {
+  height: 26px;
+  min-height: 0;
+  box-sizing: border-box;
+  line-height: 24px;
+}
+
+@media (max-width: 680px) {
+  .eeg-settings-popover--dual {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+  }
+  .eeg-settings-columns { grid-template-columns: 1fr; gap: 10px; }
+  .eeg-settings-column + .eeg-settings-column {
+    border-left: 0;
+    border-top: 1px solid rgba(140, 170, 210, 0.18);
+    padding: 10px 0 0;
+  }
+}
+
 .eeg-settings-popover[hidden] {
   display: none;
 }
@@ -3518,6 +3587,23 @@ select option {
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(140, 170, 210, 0.12);
 }
+
+.eeg-settings-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.eeg-settings-close:hover { color: var(--text); background: rgba(140, 170, 210, 0.12); }
 
 .eeg-settings-popover-head .band-panel-title {
   font-size: 13px;

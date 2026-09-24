@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Stateful PPG high-pass and power-line notch filtering."""
+"""Stateful PPG Butterworth bandpass filtering."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ import numpy as np
 from scipy.signal import butter, sosfilt, sosfilt_zi
 
 
-# PPG filtering is intentionally fixed in code.  The current CH8 protocol
-# emits one PPG point per five 500-Hz EEG samples, i.e. 100 Hz.
+# The current CH8 protocol emits one PPG point per five 500-Hz EEG samples.
 PPG_SAMPLING_RATE_HZ = 100.0
 PPG_LOWCUT_HZ = 0.5
+PPG_HIGHCUT_HZ = 5.0
 PPG_FILTER_ORDER = 4
 
 
@@ -22,6 +22,7 @@ PPG_FILTER_ORDER = 4
 class PpgBandpassFilterConfig:
     sampling_rate_hz: float = PPG_SAMPLING_RATE_HZ
     lowcut_hz: float = PPG_LOWCUT_HZ
+    highcut_hz: float = PPG_HIGHCUT_HZ
     order: int = PPG_FILTER_ORDER
     enabled: bool = True
 
@@ -35,6 +36,7 @@ class PpgBandpassFilter:
         cfg = cfg or PpgBandpassFilterConfig()
         self._sampling_rate_hz = float(cfg.sampling_rate_hz)
         self._lowcut_hz = float(cfg.lowcut_hz)
+        self._highcut_hz = float(cfg.highcut_hz)
         self._order = int(cfg.order)
         self._enabled = bool(cfg.enabled)
         self._sos: Optional[np.ndarray] = None
@@ -47,18 +49,21 @@ class PpgBandpassFilter:
         self._sos = None
         self._states = None
         self._primed = False
-        if self._sampling_rate_hz <= 0 or self._lowcut_hz <= 0:
-            return
         nyquist = self._sampling_rate_hz / 2.0
-        if not np.isfinite(self._lowcut_hz) or self._lowcut_hz >= nyquist:
-            return
         self._sos = butter(
-            max(1, self._order),
-            self._lowcut_hz,
-            btype="highpass",
+            self._order,
+            [self._lowcut_hz, self._highcut_hz],
+            btype="bandpass",
             fs=self._sampling_rate_hz,
             output="sos",
         )
+
+    def reconfigure(self, *, enabled: bool, lowcut_hz: float, highcut_hz: float, order: int) -> None:
+        self._enabled = bool(enabled)
+        self._lowcut_hz = float(lowcut_hz)
+        self._highcut_hz = float(highcut_hz)
+        self._order = int(order)
+        self._build_sos()
 
     def reset(self) -> None:
         self._states = None
@@ -108,6 +113,10 @@ class PpgBandpassFilter:
     @property
     def lowcut_hz(self) -> float:
         return self._lowcut_hz
+
+    @property
+    def highcut_hz(self) -> float:
+        return self._highcut_hz
 
     @property
     def order(self) -> int:
