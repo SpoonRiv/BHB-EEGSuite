@@ -13,15 +13,21 @@
 - `core/modules.py`：安装切换、加载、卸载与接口隔离。
 - `module_data/music/`：本机已安装的运行副本；`module_data/cache/`：已校验的下载缓存，两者都不入库。
 
-发布由 `.github/workflows/release-music.yml` 在 Windows runner 上自动完成。提交到 `main` 后，推送新的基础包标签。当前示例：
+发布工具只保留在发布者本机的 `tools/`，不提交到 Git。Windows 本机使用项目的 `BHB` Conda 环境构建；首次使用时安装 PyInstaller：
 
 ```powershell
-git push origin main
-git tag base-V1
-git push origin base-V1
+conda env create -f environment.yml
+conda run -n BHB python -m pip install pyinstaller==6.16.0
 ```
 
-Actions 会生成并发布同一 Release 下的 `BHB-EEGSuite-base.zip`、`BHB-EEGSuite-music-V1.zip` 和 `modules.json`。基础 ZIP 包含 Windows exe、Python 运行时、依赖、页面和默认配置；音乐 ZIP 是可选附件，不进入基础包。本机测试文件保留在 `tests/`，不提交到 GitHub。`modules.json` 中的 ZIP URL 指向带版本号的 Release 资产；不要覆盖已经发布的标签或包。发布新基础包时使用新标签，如 `base-V2`。只有音乐内容变化时才将 `manifest.json` 的版本改为 `V2`。项目默认从 `releases/latest/download/modules.json` 获取索引，因此后续公开 Release 也必须包含该索引。如果仓库使用其他托管位置，在 `configs/config.local.yaml` 中覆盖：
+每次发布先确定一个新标签，例如 `v3.5.7`，再在项目根目录运行：
+
+```powershell
+$releaseTag = "v3.5.7"
+conda run -n BHB python tools/build_windows.py --asset-base-url "https://github.com/SpoonRiv/BHB-EEGSuite/releases/download/$releaseTag"
+```
+
+在 GitHub Releases 页面手动创建同名标签的 Release，从本机 `dist/` 上传 `BHB-EEGSuite-base.zip`、`BHB-EEGSuite-music-V1.zip` 和 `modules.json`，然后发布。基础 ZIP 包含 Windows exe、Python 运行时、依赖、页面和默认配置，不含项目文档；音乐 ZIP 是可选附件，不进入基础包。`modules.json` 中的 ZIP URL 必须与实际 Release 标签一致。不要覆盖已经发布的标签或包；只有音乐内容变化时才将 `manifest.json` 的版本改为 `V2`。项目默认从 `releases/latest/download/modules.json` 获取索引，因此后续公开 Release 也必须包含该索引。`tools/` 和 `tests/` 都只保留在本机，换电脑构建前需要自行备份这些工具。如果仓库使用其他托管位置，在 `configs/config.local.yaml` 中覆盖：
 
 ```yaml
 modules:
@@ -38,7 +44,7 @@ modules:
 
 ## 验收
 
-1. 在 GitHub 仓库 Actions 页面确认 `Release Windows base and music extension` 运行成功，并在 Releases 页面看到新的 `base-V*` 标签和三个资产。
+1. 在 GitHub Releases 页面确认新标签下有上述三个附件，并检查 `modules.json` 内的下载 URL 使用同一个标签。
 2. 在项目根目录运行下列公网校验命令，它会在系统临时目录下载并核对 ZIP，不修改已有 `module_data`：
 
 ```powershell
